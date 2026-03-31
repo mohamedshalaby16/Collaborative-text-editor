@@ -30,4 +30,14 @@ public class CharacterCRDT {
 
         nodeMap.put(id, newNode);
     }
+
+    public void delete(String id) {
+
+        CRDTNode node = nodeMap.get(id);
+
+        if (node != null) {
+            node.del = true;
+        }
+    }
+
 }
