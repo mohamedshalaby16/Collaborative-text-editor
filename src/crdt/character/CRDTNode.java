@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CRDTNode {
-    String id;
-    char value;
-    boolean del;
-    CRDTNode parent;
-    List<CRDTNode> children;
+    public String id;
+    public char value;
+    public boolean del;
+    public CRDTNode parent;
+    public List<CRDTNode> children;
 
     public CRDTNode(String id, char value, CRDTNode parent) {
         this.id = id;

@@ -7,8 +7,8 @@ import java.util.Map;
 
 public class CharacterCRDT {
 
-    Map<String, CRDTNode> nodeMap;
-    List<CRDTNode> roots; //nodes with parent = null
+    public Map<String, CRDTNode> nodeMap;
+    public List<CRDTNode> roots; //nodes with parent = null
 
     public CharacterCRDT() {
         nodeMap = new HashMap<>();
@@ -37,6 +37,26 @@ public class CharacterCRDT {
 
         if (node != null) {
             node.del = true;
+        }
+    }
+
+    public String getText() {
+        StringBuilder result = new StringBuilder();
+
+        for (CRDTNode node : roots) {
+            buildText(node, result);
+        }
+
+        return result.toString();
+    }
+
+    private void buildText(CRDTNode node, StringBuilder result) {
+        if (!node.del) {
+            result.append(node.value);
+        }
+
+        for (CRDTNode child : node.children) {
+            buildText(child, result);
         }
     }
 
