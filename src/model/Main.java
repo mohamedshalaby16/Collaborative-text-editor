@@ -1,6 +1,7 @@
 package model;
 
 import crdt.character.CharacterCRDT;
+import operations.InsertCharacterOperation;
 
 public class Main {
     public static void main(String[] args) {
@@ -14,6 +15,11 @@ public class Main {
 
         crdt.delete("2");
 
-        System.out.println("Final visible text: " + crdt.getText());
+        // System.out.println("Final visible text: " + crdt.getText());
+        // InsertCharacterOperation myop = new InsertCharacterOperation('a', "asd",
+        // null, null);
+        // Document myDoc = new Document();
+        // myDoc.apply(myop);
+
     }
 }
