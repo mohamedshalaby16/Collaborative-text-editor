@@ -2,20 +2,26 @@ package operations;
 
 public class InsertCharacterOperation {
 
+    private int userId;
+    private int clock;
     private char value;
-    private String charId;
     private String parentId;
     private String blockId;
 
-    public InsertCharacterOperation(char value, String charId, String parentId, String blockId) {
+    public InsertCharacterOperation(int userId, int clock, char value, String parentId, String blockId) {
+        this.userId = userId;
+        this.clock = clock;
         this.value = value;
-        this.charId = charId;
         this.parentId = parentId;
         this.blockId = blockId;
     }
 
-    public String getCharId() {
-        return charId;
+    public int getUserId() {
+        return userId;
+    }
+
+    public int getClock() {
+        return clock;
     }
 
     public char getValue() {
@@ -30,4 +36,7 @@ public class InsertCharacterOperation {
         return blockId;
     }
 
+    public String getCharId() {
+        return userId + "-" + clock;
+    }
 }

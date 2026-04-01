@@ -1,25 +1,26 @@
 package model;
 
 import crdt.character.CharacterCRDT;
-import operations.InsertCharacterOperation;
 
 public class Main {
     public static void main(String[] args) {
 
         CharacterCRDT crdt = new CharacterCRDT();
 
-        crdt.insert("1", 'A', null);
-        crdt.insert("2", 'B', "1");
-        crdt.insert("3", 'C', "2");
-        crdt.insert("4", 'D', "1");
+        // Insert first character A => id = 1-0
+        crdt.insert(1, 0, 'A', null);
 
-        crdt.delete("2");
+        // Insert B after A => id = 1-1
+        crdt.insert(1, 1, 'B', "1-0");
 
-        // System.out.println("Final visible text: " + crdt.getText());
-        // InsertCharacterOperation myop = new InsertCharacterOperation('a', "asd",
-        // null, null);
-        // Document myDoc = new Document();
-        // myDoc.apply(myop);
+        // Insert C after A => id = 2-0
+        crdt.insert(2, 0, 'C', "1-0");
 
+        System.out.println("After inserts: " + crdt.getText());
+
+        // Delete B
+        crdt.delete("1-1");
+
+        System.out.println("After deleting B: " + crdt.getText());
     }
 }

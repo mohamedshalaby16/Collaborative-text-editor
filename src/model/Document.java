@@ -29,31 +29,34 @@ public class Document {
 
     // Marks a block as deleted (tombstone)
     public void apply(DeleteBlockOperation myOperation) {
+        Block currBlock = blockMap.get(myOperation.getBlockId());
 
-        blockMap.remove(myOperation.getBlockId()); // and manage in block crdt
-
-        // Send to server
+        if (currBlock != null) {
+            currBlock.setDeleted(true);
+        }
     }
 
     // Gets the correct blcok and calls the isnert crdt function
     public void apply(InsertCharacterOperation myOperation) {
-        Block currBlock = blockMap.get(myOperation.getBlockId()); // find the block
+        Block currBlock = blockMap.get(myOperation.getBlockId());
+
         if (currBlock != null) {
             currBlock.getCharCRDT().insert(
-                    myOperation.getCharId(),
+                    myOperation.getUserId(),
+                    myOperation.getClock(),
                     myOperation.getValue(),
-                    myOperation.getParentCharId());
+                    myOperation.getParentCharId()
+            );
         }
-        // Send to server
     }
 
     // Gets block then make the character deleted
     public void apply(DeleteCharacterOperation myOperation) {
-        Block currBlock = blockMap.get(myOperation.getBlockId()); // find the block
+        Block currBlock = blockMap.get(myOperation.getBlockId());
+
         if (currBlock != null) {
             currBlock.getCharCRDT().delete(myOperation.getCharId());
         }
-        // Send to server
     }
 
     // Gets the whole text
