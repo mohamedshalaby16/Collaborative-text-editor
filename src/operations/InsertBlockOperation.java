@@ -2,11 +2,15 @@ package operations;
 
 public class InsertBlockOperation {
     private String blockId;
-    private String afterBlockId;
+    private String parentBlockId;
+    private int userId;
+    private int clock;
 
-    public InsertBlockOperation(String blockId, String afterBlockId) {
+    public InsertBlockOperation(String blockId, String parentBlockId, int userId, int clock) {
         this.blockId = blockId;
-        this.afterBlockId = afterBlockId;
+        this.parentBlockId = parentBlockId;
+        this.userId=userId;
+        this.clock=clock;
     }
 
     public String getBlockId() {
@@ -14,6 +18,12 @@ public class InsertBlockOperation {
     }
 
     public String getAfterBlockId() {
-        return afterBlockId;
+        return parentBlockId;
+    }
+     public int getUserId() {
+         return userId;
+    }
+    public int getClock() { 
+        return clock;
     }
 }
