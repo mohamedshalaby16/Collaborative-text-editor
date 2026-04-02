@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import util.OrderingUtil;
+
 public class CharacterCRDT {
 
     public Map<String, CRDTNode> nodeMap;
@@ -70,15 +72,19 @@ public class CharacterCRDT {
     }
 
     private void sortNodes(List<CRDTNode> nodes) {
-        nodes.sort(new Comparator<CRDTNode>() {
-            @Override
-            public int compare(CRDTNode a, CRDTNode b) {
-
-                if (a.clock != b.clock) {
-                    return Integer.compare(b.clock, a.clock);
-                }
-                return Integer.compare(a.userId, b.userId);
-            }
-        });
+        nodes.sort((a, b) -> OrderingUtil.compare(a.clock, a.userId, b.clock, b.userId));
     }
+
+    // private void sortNodes(List<CRDTNode> nodes) {
+    // nodes.sort(new Comparator<CRDTNode>() {
+    // @Override
+    // public int compare(CRDTNode a, CRDTNode b) {
+
+    // if (a.clock != b.clock) {
+    // return Integer.compare(b.clock, a.clock);
+    // }
+    // return Integer.compare(a.userId, b.userId);
+    // }
+    // });
+    // }
 }
