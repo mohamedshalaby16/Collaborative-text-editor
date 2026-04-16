@@ -1,5 +1,10 @@
 package network;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import operations.InsertCharacterOperation;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
@@ -7,73 +12,91 @@ import operations.DeleteBlockOperation;
 
 public class MessageHandler {
 
-    // Message format: TYPE|userId|clock|value|parentId|blockId
-    // Types: INSERT_CHAR, DELETE_CHAR, INSERT_BLOCK, DELETE_BLOCK
+    private static final Gson gson = new GsonBuilder().create();
 
+    // ========== CONVERT OPERATION TO JSON STRING ==========
     public static String operationToMessage(Object operation) {
+        JsonObject json = new JsonObject();
+
         if (operation instanceof InsertCharacterOperation) {
             InsertCharacterOperation op = (InsertCharacterOperation) operation;
-            return "INSERT_CHAR|" + op.getUserId() + "|" + op.getClock() + "|" +
-                    op.getValue() + "|" + nullToEmpty(op.getParentCharId()) + "|" +
-                    op.getBlockId();
+            json.addProperty("type", "INSERT_CHAR");
+            json.addProperty("userId", op.getUserId());
+            json.addProperty("clock", op.getClock());
+            json.addProperty("value", String.valueOf(op.getValue()));
+            json.addProperty("parentId", op.getParentCharId());
+            json.addProperty("blockId", op.getBlockId());
 
         } else if (operation instanceof DeleteCharacterOperation) {
             DeleteCharacterOperation op = (DeleteCharacterOperation) operation;
-            return "DELETE_CHAR|" + op.getUserId() + "|" + op.getClock() + "|" +
-                    "|" + op.getCharId() + "|" + op.getBlockId();
+            json.addProperty("type", "DELETE_CHAR");
+            json.addProperty("userId", op.getUserId());
+            json.addProperty("clock", op.getClock());
+            json.addProperty("charId", op.getCharId());
+            json.addProperty("blockId", op.getBlockId());
 
         } else if (operation instanceof InsertBlockOperation) {
             InsertBlockOperation op = (InsertBlockOperation) operation;
-            return "INSERT_BLOCK|" + op.getUserId() + "|" + op.getClock() + "|" +
-                    op.getBlockId() + "|" + nullToEmpty(op.getAfterBlockId()) + "|";
+            json.addProperty("type", "INSERT_BLOCK");
+            json.addProperty("userId", op.getUserId());
+            json.addProperty("clock", op.getClock());
+            json.addProperty("blockId", op.getBlockId());
+            json.addProperty("parentBlockId", op.getAfterBlockId());
 
         } else if (operation instanceof DeleteBlockOperation) {
             DeleteBlockOperation op = (DeleteBlockOperation) operation;
-            return "DELETE_BLOCK|0|0|" + op.getBlockId() + "||";
+            json.addProperty("type", "DELETE_BLOCK");
+            json.addProperty("blockId", op.getBlockId());
+
+        } else {
+            return null;
         }
 
-        return null;
+        return gson.toJson(json);
     }
 
+    // ========== CONVERT JSON STRING TO OPERATION ==========
     public static Object messageToOperation(String message) {
-        String[] parts = message.split("\\|");
-        String type = parts[0];
+        try {
+            JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+            String type = json.get("type").getAsString();
 
-        switch (type) {
-            case "INSERT_CHAR":
-                int userId = Integer.parseInt(parts[1]);
-                int clock = Integer.parseInt(parts[2]);
-                char value = parts[3].charAt(0);
-                String parentId = emptyToNull(parts[4]);
-                String blockId = parts[5];
-                return new InsertCharacterOperation(userId, clock, value, parentId, blockId);
+            switch (type) {
+                case "INSERT_CHAR":
+                    int userId = json.get("userId").getAsInt();
+                    int clock = json.get("clock").getAsInt();
+                    char value = json.get("value").getAsString().charAt(0);
+                    String parentId = json.has("parentId") && !json.get("parentId").isJsonNull()
+                            ? json.get("parentId").getAsString()
+                            : null;
+                    String blockId = json.get("blockId").getAsString();
+                    return new InsertCharacterOperation(userId, clock, value, parentId, blockId);
 
-            case "DELETE_CHAR":
-                int userIdDel = Integer.parseInt(parts[1]);
-                int clockDel = Integer.parseInt(parts[2]);
-                String blockIdDel = parts[5];
-                return new DeleteCharacterOperation(userIdDel, clockDel, blockIdDel);
+                case "DELETE_CHAR":
+                    int userIdDel = json.get("userId").getAsInt();
+                    int clockDel = json.get("clock").getAsInt();
+                    String blockIdDel = json.get("blockId").getAsString();
+                    return new DeleteCharacterOperation(userIdDel, clockDel, blockIdDel);
 
-            case "INSERT_BLOCK":
-                int userIdBlock = Integer.parseInt(parts[1]);
-                int clockBlock = Integer.parseInt(parts[2]);
-                String blockIdNew = parts[3];
-                String parentBlockId = emptyToNull(parts[4]);
-                return new InsertBlockOperation(blockIdNew, parentBlockId, userIdBlock, clockBlock);
+                case "INSERT_BLOCK":
+                    int userIdBlock = json.get("userId").getAsInt();
+                    int clockBlock = json.get("clock").getAsInt();
+                    String blockIdNew = json.get("blockId").getAsString();
+                    String parentBlockId = json.has("parentBlockId") && !json.get("parentBlockId").isJsonNull()
+                            ? json.get("parentBlockId").getAsString()
+                            : null;
+                    return new InsertBlockOperation(blockIdNew, parentBlockId, userIdBlock, clockBlock);
 
-            case "DELETE_BLOCK":
-                String blockIdDelBlock = parts[3];
-                return new DeleteBlockOperation(blockIdDelBlock);
+                case "DELETE_BLOCK":
+                    String blockIdDelBlock = json.get("blockId").getAsString();
+                    return new DeleteBlockOperation(blockIdDelBlock);
+
+                default:
+                    return null;
+            }
+        } catch (Exception e) {
+            System.out.println("Failed to parse JSON message: " + e.getMessage());
+            return null;
         }
-
-        return null;
-    }
-
-    private static String nullToEmpty(String str) {
-        return str == null ? "" : str;
-    }
-
-    private static String emptyToNull(String str) {
-        return (str == null || str.isEmpty()) ? null : str;
     }
 }

@@ -6,8 +6,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList; // FIX: thread-safe list
 
 public class WebSocketServer {
 
@@ -18,7 +18,7 @@ public class WebSocketServer {
     public WebSocketServer(int port) {
         try {
             serverSocket = new ServerSocket(port);
-            clients = new ArrayList<>();
+            clients = new CopyOnWriteArrayList<>(); // FIX: was new ArrayList<>()
             running = true;
             System.out.println("Server started on port " + port);
         } catch (IOException e) {
@@ -41,6 +41,7 @@ public class WebSocketServer {
     }
 
     public void broadcast(String message, ClientHandler sender) {
+        System.out.println("Broadcasting to " + (clients.size() - 1) + " other clients: " + message);
         for (ClientHandler client : clients) {
             if (client != sender) {
                 client.sendMessage(message);
@@ -89,7 +90,7 @@ public class WebSocketServer {
                 String message;
                 while ((message = in.readLine()) != null) {
                     System.out.println("Received from " + clientId + ": " + message);
-                    server.broadcast(message, this);
+                    server.broadcast(message, this); // broadcast to all OTHER clients
                 }
             } catch (IOException e) {
                 System.out.println("Client " + clientId + " disconnected");
@@ -100,7 +101,9 @@ public class WebSocketServer {
         }
 
         public void sendMessage(String message) {
-            out.println(message);
+            if (out != null) {
+                out.println(message);
+            }
         }
 
         public void close() {

@@ -3,6 +3,8 @@ package crdt.character;
 import java.util.ArrayList;
 import java.util.List;
 
+import util.IdGenerator;
+
 public class CRDTNode {
     public final int userId;
     public final int clock;
@@ -21,6 +23,6 @@ public class CRDTNode {
     }
 
     public String getId() {
-        return userId + "-" + clock;
+        return IdGenerator.generate(userId, clock);
     }
 }

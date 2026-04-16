@@ -4,6 +4,8 @@ import model.Document;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
 import operations.InsertCharacterOperation;
+import network.WebSocketClient; /// Integration: Added for real network communication
+import network.MessageHandler; /// Integration: Added for converting operations to/from messages
 
 import javax.swing.*;
 import javax.swing.text.*;
@@ -14,7 +16,8 @@ import java.util.List;
 public class EditorUI extends JFrame {
 
     private final String HOST = "localhost";
-    private final int PORT = 5000;
+    private final int PORT = 9091;
+    /// Integration: Make sure server uses same port
 
     private JTextPane textPane;
     private JTextField usernameField;
@@ -31,6 +34,10 @@ public class EditorUI extends JFrame {
 
     // Keeps inserted character IDs in order for simple delete-from-end
     private List<String> insertedCharIds;
+
+    /// Integration: Network client and connection state
+    private WebSocketClient wsClient;
+    private boolean isConnected = false;
 
     public EditorUI() {
         setTitle("Collaborative Text Editor");
@@ -79,8 +86,13 @@ public class EditorUI extends JFrame {
     }
 
     private void addListeners() {
+        /// Integration: REPLACED - Now connects to real server instead of simulating
         connectButton.addActionListener(e -> {
-            setStatus("Connected (simulated) to " + HOST + ":" + PORT);
+            if (!isConnected) {
+                connectToServer();
+            } else {
+                disconnectFromServer();
+            }
         });
 
         AbstractDocument doc = (AbstractDocument) textPane.getDocument();
@@ -89,7 +101,6 @@ public class EditorUI extends JFrame {
             @Override
             public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr)
                     throws BadLocationException {
-                // Most JTextPane typing is handled through replace(), so keep this minimal
                 if (isRemoteUpdate) {
                     super.insertString(fb, offset, string, attr);
                 } else {
@@ -127,8 +138,7 @@ public class EditorUI extends JFrame {
                                 EditorUI.this,
                                 "For now, only typing at the end is supported.",
                                 "Insert Not Supported Yet",
-                                JOptionPane.WARNING_MESSAGE
-                        );
+                                JOptionPane.WARNING_MESSAGE);
                         refreshTextFromDocument();
                     }
                     return;
@@ -143,8 +153,7 @@ public class EditorUI extends JFrame {
                                 EditorUI.this,
                                 "For now, only deleting from the end is supported.",
                                 "Delete Not Supported Yet",
-                                JOptionPane.WARNING_MESSAGE
-                        );
+                                JOptionPane.WARNING_MESSAGE);
                         refreshTextFromDocument();
                     }
                     return;
@@ -155,8 +164,7 @@ public class EditorUI extends JFrame {
                         EditorUI.this,
                         "For now, replace/edit-in-middle is not supported.",
                         "Edit Not Supported Yet",
-                        JOptionPane.WARNING_MESSAGE
-                );
+                        JOptionPane.WARNING_MESSAGE);
                 refreshTextFromDocument();
             }
         });
@@ -175,8 +183,7 @@ public class EditorUI extends JFrame {
                     this,
                     "For now, only typing at the end is supported.",
                     "Insert Not Supported Yet",
-                    JOptionPane.WARNING_MESSAGE
-            );
+                    JOptionPane.WARNING_MESSAGE);
             refreshTextFromDocument();
             return;
         }
@@ -197,8 +204,7 @@ public class EditorUI extends JFrame {
                     this,
                     "For now, only deleting from the end is supported.",
                     "Delete Not Supported Yet",
-                    JOptionPane.WARNING_MESSAGE
-            );
+                    JOptionPane.WARNING_MESSAGE);
             refreshTextFromDocument();
             return;
         }
@@ -212,15 +218,20 @@ public class EditorUI extends JFrame {
 
             String parentId = insertedCharIds.isEmpty() ? null : insertedCharIds.get(insertedCharIds.size() - 1);
 
-            InsertCharacterOperation op =
-                    new InsertCharacterOperation(localUserId, localClock, value, parentId, blockId);
+            InsertCharacterOperation op = new InsertCharacterOperation(localUserId, localClock, value, parentId,
+                    blockId);
 
             document.apply(op);
 
             insertedCharIds.add(op.getCharId());
             localClock++;
 
-            simulateSend("INSERT|" + getUsername() + "|" + op.getCharId() + "|" + value);
+            /// Integration: REPLACED - Now sends real message instead of simulateSend
+            if (wsClient != null && wsClient.isConnected()) {
+                String message = MessageHandler.operationToMessage(op);
+                wsClient.sendMessage(message);
+                System.out.println("Sent: " + message);
+            }
         }
         System.out.println("Document text after insert = [" + document.getText() + "]");
         refreshTextFromDocument();
@@ -238,12 +249,16 @@ public class EditorUI extends JFrame {
             int userId = Integer.parseInt(parts[0]);
             int clock = Integer.parseInt(parts[1]);
 
-            DeleteCharacterOperation op =
-                    new DeleteCharacterOperation(userId, clock, blockId);
+            DeleteCharacterOperation op = new DeleteCharacterOperation(userId, clock, blockId);
 
             document.apply(op);
 
-            simulateSend("DELETE|" + getUsername() + "|" + op.getCharId());
+            /// Integration: REPLACED - Now sends real message instead of simulateSend
+            if (wsClient != null && wsClient.isConnected()) {
+                String message = MessageHandler.operationToMessage(op);
+                wsClient.sendMessage(message);
+                System.out.println("Sent: " + message);
+            }
         }
         System.out.println("Document text after delete = [" + document.getText() + "]");
         refreshTextFromDocument();
@@ -255,8 +270,56 @@ public class EditorUI extends JFrame {
         isRemoteUpdate = false;
     }
 
-    private void simulateSend(String msg) {
-        System.out.println("Sending: " + msg);
+    /// Integration: REMOVED simulateSend method - no longer needed
+
+    /// Integration: ADDED - Connect to real server
+    private void connectToServer() {
+        wsClient = new WebSocketClient(HOST, PORT, new WebSocketClient.MessageListener() {
+            @Override
+            public void onMessageReceived(String message) {
+                SwingUtilities.invokeLater(() -> {
+                    handleRemoteMessage(message);
+                });
+            }
+
+            @Override
+            public void onConnected() {
+                SwingUtilities.invokeLater(() -> {
+                    isConnected = true;
+                    setStatus("Connected to " + HOST + ":" + PORT);
+                    connectButton.setText("Disconnect");
+                    textPane.setEditable(true);
+                });
+            }
+
+            @Override
+            public void onDisconnected() {
+                SwingUtilities.invokeLater(() -> {
+                    isConnected = false;
+                    setStatus("Disconnected");
+                    connectButton.setText("Connect");
+                    textPane.setEditable(false);
+                });
+            }
+        });
+        wsClient.connect();
+    }
+
+    /// Integration: ADDED - Disconnect from server
+    private void disconnectFromServer() {
+        if (wsClient != null) {
+            wsClient.disconnect();
+        }
+    }
+
+    /// Integration: ADDED - Handle incoming remote messages
+    private void handleRemoteMessage(String message) {
+        System.out.println(">>> Remote message: " + message);
+        Object operation = MessageHandler.messageToOperation(message);
+        if (operation != null) {
+            document.applyRemote(operation);
+            refreshTextFromDocument();
+        }
     }
 
     public void updateTextFromRemote(String text) {

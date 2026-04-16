@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
+import util.IdGenerator;
 import util.OrderingUtil;
 
 public class CharacterCRDT {
@@ -18,7 +19,7 @@ public class CharacterCRDT {
     }
 
     public void insert(int userId, int clock, char value, String parentId) {
-        String newId = userId + "-" + clock;
+        String newId = IdGenerator.generate(userId, clock);
 
         // Ignore duplicate insert
         if (nodeMap.containsKey(newId)) {

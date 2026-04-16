@@ -1,5 +1,7 @@
 package operations;
 
+import util.IdGenerator;
+
 public class DeleteCharacterOperation {
 
     private int userId;
@@ -25,6 +27,6 @@ public class DeleteCharacterOperation {
     }
 
     public String getCharId() {
-        return userId + "-" + clock;
+        return IdGenerator.generate(userId, clock);
     }
 }

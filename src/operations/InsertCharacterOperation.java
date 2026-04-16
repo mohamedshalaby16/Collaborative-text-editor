@@ -1,5 +1,7 @@
 package operations;
 
+import util.IdGenerator;
+
 public class InsertCharacterOperation {
 
     private int userId;
@@ -37,6 +39,6 @@ public class InsertCharacterOperation {
     }
 
     public String getCharId() {
-        return userId + "-" + clock;
+        return IdGenerator.generate(userId, clock);
     }
 }
