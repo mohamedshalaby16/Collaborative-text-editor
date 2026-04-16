@@ -86,4 +86,16 @@ public class BlockCRDT {
     private void sortBlocks(List<Block> blocks) {
         blocks.sort((a, b) -> OrderingUtil.compare(a.clock, a.userId, b.clock, b.userId));
     }
+
+    public Block getBlock(String blockId) {
+        return nodeMap.get(blockId);
+    }
+
+    public void putBlock(String blockId, Block block) {
+        nodeMap.put(blockId, block);
+    }
+
+    public void addRoot(Block block) {
+        roots.add(block);
+    }
 }
