@@ -55,6 +55,17 @@ public class MessageHandler {
         return gson.toJson(json);
     }
 
+        // ========== CURSOR MESSAGE ==========
+    public static String cursorToMessage(int userId, String username, int position) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "CURSOR");
+        json.addProperty("userId", userId);
+        json.addProperty("username", username);
+        json.addProperty("position", position);
+        return gson.toJson(json);
+    }
+
+    
     // ========== CONVERT JSON STRING TO OPERATION ==========
     public static Object messageToOperation(String message) {
         try {
@@ -98,5 +109,26 @@ public class MessageHandler {
             System.out.println("Failed to parse JSON message: " + e.getMessage());
             return null;
         }
+    }
+     // ========== CHECK IF MESSAGE IS CURSOR ==========
+    public static boolean isCursorMessage(String message) {
+        try {
+            JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+            return "CURSOR".equals(json.get("type").getAsString());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+ 
+    public static int getCursorUserId(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("userId").getAsInt();
+    }
+ 
+    public static String getCursorUsername(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("username").getAsString();
+    }
+ 
+    public static int getCursorPosition(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("position").getAsInt();
     }
 }

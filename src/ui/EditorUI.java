@@ -1,17 +1,22 @@
 package ui;
 
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.swing.*;
+import javax.swing.text.*;
+ /// Integration: Added for real network communication
+import model.CursorInfo;
+ /// Integration: Added for converting operations to/from messages
 import model.Document;
+import network.MessageHandler;
+import network.WebSocketClient;
+import operations.DeleteBlockOperation;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
 import operations.InsertCharacterOperation;
-import network.WebSocketClient; /// Integration: Added for real network communication
-import network.MessageHandler; /// Integration: Added for converting operations to/from messages
-
-import javax.swing.*;
-import javax.swing.text.*;
-import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
 
 public class EditorUI extends JFrame {
 
@@ -24,6 +29,11 @@ public class EditorUI extends JFrame {
     private JButton connectButton;
     private JLabel statusLabel;
 
+     // Active users panel
+    private JPanel usersPanel;
+    private JLabel usersTitle;
+    private Map<Integer, JLabel> userLabels; // userId -> label in the panel
+
     private boolean isRemoteUpdate = false;
 
     // Phase 1 integration
@@ -34,6 +44,9 @@ public class EditorUI extends JFrame {
 
     // Keeps inserted character IDs in order for simple delete-from-end
     private List<String> visibleCharIds;
+
+    // Cursor tracking: userId -> CursorInfo
+    private Map<Integer, CursorInfo> remoteCursors;
 
     /// Integration: Network client and connection state
     private WebSocketClient wsClient;
@@ -58,6 +71,8 @@ public class EditorUI extends JFrame {
     private void initPhase1Core() {
         document = new Document();
         visibleCharIds = new ArrayList<>();
+        remoteCursors = new HashMap<>();
+        userLabels = new HashMap<>();
 
         // Create one default block
         document.apply(new InsertBlockOperation(blockId, null, localUserId, localClock));
@@ -66,10 +81,21 @@ public class EditorUI extends JFrame {
 
     private void initComponents() {
         textPane = new JTextPane();
+        textPane.setEditable(false);
 
         usernameField = new JTextField("user1", 10);
         connectButton = new JButton("Connect");
         statusLabel = new JLabel("Not connected");
+
+        usersPanel = new JPanel();
+        usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.Y_AXIS));
+        usersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        usersPanel.setPreferredSize(new Dimension(150, 0));
+ 
+        usersTitle = new JLabel("Active Users");
+        usersTitle.setFont(usersTitle.getFont().deriveFont(Font.BOLD));
+        usersPanel.add(usersTitle);
+        usersPanel.add(Box.createVerticalStrut(8));
     }
 
     private void layoutComponents() {
@@ -85,6 +111,7 @@ public class EditorUI extends JFrame {
         setLayout(new BorderLayout());
         add(topPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
+        add(usersPanel, BorderLayout.EAST);
     }
 
     private void addListeners() {
@@ -94,6 +121,14 @@ public class EditorUI extends JFrame {
                 connectToServer();
             } else {
                 disconnectFromServer();
+            }
+        });
+         // Send cursor position whenever caret moves
+        textPane.addCaretListener(e -> {
+            if (!isRemoteUpdate && isConnected) {
+                int position = e.getDot();
+                String message = MessageHandler.cursorToMessage(localUserId, getUsername(), position);
+                wsClient.sendMessage(message);
             }
         });
 
@@ -266,11 +301,61 @@ public class EditorUI extends JFrame {
         refreshTextFromDocument();
     }
 
+// ------------------------------------------------------------------ //
+    //  Cursor rendering                                                    //
+    // ------------------------------------------------------------------ //
+ 
+    /**
+     * Repaints the text with all remote cursors highlighted.
+     * Each remote user gets a colored background at their caret position.
+     */
     private void refreshTextFromDocument() {
-        isRemoteUpdate = true;
-        textPane.setText(document.getText());
-        isRemoteUpdate = false;
+    isRemoteUpdate = true;
+    String text = document.getText();
+    textPane.setText(text);
+    isRemoteUpdate = false;
+
+    // Apply cursor highlights after text is fully rendered
+    SwingUtilities.invokeLater(() -> {
+        StyledDocument styledDoc = textPane.getStyledDocument();
+        for (CursorInfo cursor : remoteCursors.values()) {
+            int pos = cursor.position;
+            if (text.length() == 0) continue;
+             int highlightPos = Math.min(pos, text.length() - 1);
+              if (highlightPos >= 0) {
+            Style cursorStyle = textPane.addStyle("cursor-" + cursor.userId, null);
+            StyleConstants.setBackground(cursorStyle, cursor.color);
+            styledDoc.setCharacterAttributes(highlightPos, 1, cursorStyle, false);
+            
+             }
+         }
+        
+    });
+}
+
+ 
+    // ------------------------------------------------------------------ //
+    //  Active users panel                                                  //
+    // ------------------------------------------------------------------ //
+ 
+    private void addUserToPanel(CursorInfo cursor) {
+        JLabel label = new JLabel("● " + cursor.username);
+        label.setForeground(cursor.color);
+        userLabels.put(cursor.userId, label);
+        usersPanel.add(label);
+        usersPanel.revalidate();
+        usersPanel.repaint();
     }
+ 
+    private void removeUserFromPanel(int userId) {
+        JLabel label = userLabels.remove(userId);
+        if (label != null) {
+            usersPanel.remove(label);
+            usersPanel.revalidate();
+            usersPanel.repaint();
+        }
+    }
+ 
 
     /// Integration: REMOVED simulateSend method - no longer needed
 
@@ -301,6 +386,12 @@ public class EditorUI extends JFrame {
                     setStatus("Disconnected");
                     connectButton.setText("Connect");
                     textPane.setEditable(false);
+                     // Clear remote cursors and users panel
+                     remoteCursors.clear();
+                        for (int uid : new ArrayList<>(userLabels.keySet())) {
+                        removeUserFromPanel(uid);
+                     }
+                    refreshTextFromDocument();
                 });
             }
         });
@@ -318,21 +409,44 @@ public class EditorUI extends JFrame {
     private void handleRemoteMessage(String message) {
         System.out.println(">>> Remote message: " + message);
 
-        Object operation = MessageHandler.messageToOperation(message);
-
-        if (operation != null) {
-            document.applyRemote(operation);
-
-            if (operation instanceof InsertCharacterOperation) {
-                InsertCharacterOperation op = (InsertCharacterOperation) operation;
-                visibleCharIds.add(op.getCharId());
-            } else if (operation instanceof DeleteCharacterOperation) {
-                DeleteCharacterOperation op = (DeleteCharacterOperation) operation;
-                visibleCharIds.remove(op.getCharId());
+         // Handle cursor message separately
+        if (MessageHandler.isCursorMessage(message)) {
+            int userId = MessageHandler.getCursorUserId(message);
+            String username = MessageHandler.getCursorUsername(message);
+            int position = MessageHandler.getCursorPosition(message);
+                if (!remoteCursors.containsKey(userId)) {
+                // New user — create cursor and add to users panel
+                CursorInfo cursor = new CursorInfo(userId, username, position);
+                remoteCursors.put(userId, cursor);
+                addUserToPanel(cursor);
+            } else {
+                // Existing user — just update position
+                remoteCursors.get(userId).position = position;
             }
-
+ 
             refreshTextFromDocument();
+            return;
         }
+
+          Object operation = MessageHandler.messageToOperation(message);
+
+         if (operation != null) {
+            if (operation instanceof InsertCharacterOperation) {
+         InsertCharacterOperation op = (InsertCharacterOperation) operation;
+        document.apply(op);
+        visibleCharIds.add(op.getCharId());
+            } else if (operation instanceof DeleteCharacterOperation) {
+        DeleteCharacterOperation op = (DeleteCharacterOperation) operation;
+        document.apply(op);
+        visibleCharIds.remove(op.getCharId());
+    } else if (operation instanceof InsertBlockOperation) {
+        document.apply((InsertBlockOperation) operation);
+    } else if (operation instanceof DeleteBlockOperation) {
+        document.apply((DeleteBlockOperation) operation);
+    }
+
+    refreshTextFromDocument();
+}
     }
 
     public void updateTextFromRemote(String text) {
