@@ -2,6 +2,7 @@ package model;
 
 import crdt.block.Block;
 import crdt.block.BlockCRDT;
+import java.util.Collections;
 import java.util.List;
 import operations.DeleteBlockOperation;
 import operations.DeleteCharacterOperation;
@@ -139,6 +140,37 @@ public class Document {
                 sb.append("\n");
         }
         return sb.toString();
+    }
+
+    public List<String> getVisibleCharacterIds(String blockId) {
+        Block block = blockCRDT.getBlock(blockId);
+
+        if (block == null || block.isDeleted()) {
+            return Collections.emptyList();
+        }
+
+        return block.getCharCRDT().getVisibleCharacterIds();
+    }
+
+    public String getCharIdBeforeOffset(String blockId, int offset) {
+        List<String> visibleIds = getVisibleCharacterIds(blockId);
+
+        if (offset <= 0 || visibleIds.isEmpty()) {
+            return null;
+        }
+
+        int index = Math.min(offset - 1, visibleIds.size() - 1);
+        return visibleIds.get(index);
+    }
+
+    public String getCharIdAtOffset(String blockId, int offset) {
+        List<String> visibleIds = getVisibleCharacterIds(blockId);
+
+        if (offset < 0 || offset >= visibleIds.size()) {
+            return null;
+        }
+
+        return visibleIds.get(offset);
     }
 
 }

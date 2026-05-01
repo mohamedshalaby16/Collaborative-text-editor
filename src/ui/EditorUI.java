@@ -3,7 +3,6 @@ package ui;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import javax.swing.*;
 import javax.swing.text.*;
@@ -42,9 +41,6 @@ public class EditorUI extends JFrame {
     private int localUserId ;
     private int localClock = 0;
 
-    // Keeps inserted character IDs in order for simple delete-from-end
-    private List<String> visibleCharIds;
-
     // Cursor tracking: userId -> CursorInfo
     private Map<Integer, CursorInfo> remoteCursors;
 
@@ -70,7 +66,6 @@ public class EditorUI extends JFrame {
 
     private void initPhase1Core() {
         document = new Document();
-        visibleCharIds = new ArrayList<>();
         remoteCursors = new HashMap<>();
         userLabels = new HashMap<>();
 
@@ -164,45 +159,26 @@ public class EditorUI extends JFrame {
                     return;
                 }
 
-                String currentText = document.getText();
-
-                // Case 1: pure typing at end
+                // Case 1: pure typing
                 if (length == 0 && text != null && !text.isEmpty()) {
-                    if (offset == currentText.length()) {
-                        handleSimpleInsert(text);
-                    } else {
-                        JOptionPane.showMessageDialog(
-                                EditorUI.this,
-                                "For now, only typing at the end is supported.",
-                                "Insert Not Supported Yet",
-                                JOptionPane.WARNING_MESSAGE);
-                        refreshTextFromDocument();
-                    }
+                    handleInsert(offset, text);
                     return;
                 }
 
-                // Case 2: pure delete from end
+                // Case 2: pure delete
                 if (length > 0 && (text == null || text.isEmpty())) {
-                    if (offset + length == currentText.length()) {
-                        handleSimpleDelete(length);
-                    } else {
-                        JOptionPane.showMessageDialog(
-                                EditorUI.this,
-                                "For now, only deleting from the end is supported.",
-                                "Delete Not Supported Yet",
-                                JOptionPane.WARNING_MESSAGE);
-                        refreshTextFromDocument();
-                    }
+                    handleDeleteRange(offset, length);
                     return;
                 }
 
                 // Case 3: replace selected text
-                JOptionPane.showMessageDialog(
-                        EditorUI.this,
-                        "For now, replace/edit-in-middle is not supported.",
-                        "Edit Not Supported Yet",
-                        JOptionPane.WARNING_MESSAGE);
-                refreshTextFromDocument();
+                if (length > 0) {
+                    handleDeleteRange(offset, length);
+                }
+
+                if (text != null && !text.isEmpty()) {
+                    handleInsert(offset, text);
+                }
             }
         });
     }
@@ -212,20 +188,7 @@ public class EditorUI extends JFrame {
             return;
         }
 
-        String currentText = document.getText();
-
-        // Temporary limitation: only append at end
-        if (offset != currentText.length()) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "For now, only typing at the end is supported.",
-                    "Insert Not Supported Yet",
-                    JOptionPane.WARNING_MESSAGE);
-            refreshTextFromDocument();
-            return;
-        }
-
-        handleSimpleInsert(string);
+        handleInsertAtOffset(offset, string);
     }
 
     private void handleRemove(int offset, int length) {
@@ -233,34 +196,21 @@ public class EditorUI extends JFrame {
             return;
         }
 
-        String currentText = document.getText();
-
-        // Temporary limitation: only delete from end
-        if (offset + length != currentText.length()) {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "For now, only deleting from the end is supported.",
-                    "Delete Not Supported Yet",
-                    JOptionPane.WARNING_MESSAGE);
-            refreshTextFromDocument();
-            return;
-        }
-
-        handleSimpleDelete(length);
+        handleDeleteRange(offset, length);
     }
 
-    private void handleSimpleInsert(String text) {
+    private void handleInsertAtOffset(int offset, String text) {
+        String parentId = document.getCharIdBeforeOffset(blockId, offset);
+
         for (int i = 0; i < text.length(); i++) {
             char value = text.charAt(i);
-
-            String parentId = visibleCharIds.isEmpty() ? null : visibleCharIds.get(visibleCharIds.size() - 1);
 
             InsertCharacterOperation op = new InsertCharacterOperation(localUserId, localClock, value, parentId,
                     blockId);
 
             document.apply(op);
 
-            visibleCharIds.add(op.getCharId());
+            parentId = op.getCharId();
             localClock++;
 
             /// Integration: REPLACED - Now sends real message instead of simulateSend
@@ -274,15 +224,17 @@ public class EditorUI extends JFrame {
         refreshTextFromDocument();
     }
 
-    private void handleSimpleDelete(int length) {
-        for (int i = 0; i < length; i++) {
-            if (visibleCharIds.isEmpty()) {
-                break;
-            }
+    private void handleDeleteRange(int offset, int length) {
+        java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
+        java.util.List<String> idsToDelete = new ArrayList<>();
 
-            String lastCharId = visibleCharIds.remove(visibleCharIds.size() - 1);
+        int end = Math.min(offset + length, visibleIds.size());
+        for (int i = offset; i < end; i++) {
+            idsToDelete.add(visibleIds.get(i));
+        }
 
-            String[] parts = lastCharId.split("-");
+        for (String charId : idsToDelete) {
+            String[] parts = charId.split("-");
             int userId = Integer.parseInt(parts[0]);
             int clock = Integer.parseInt(parts[1]);
 
@@ -430,15 +382,13 @@ public class EditorUI extends JFrame {
 
           Object operation = MessageHandler.messageToOperation(message);
 
-         if (operation != null) {
+        if (operation != null) {
             if (operation instanceof InsertCharacterOperation) {
          InsertCharacterOperation op = (InsertCharacterOperation) operation;
         document.apply(op);
-        visibleCharIds.add(op.getCharId());
             } else if (operation instanceof DeleteCharacterOperation) {
         DeleteCharacterOperation op = (DeleteCharacterOperation) operation;
         document.apply(op);
-        visibleCharIds.remove(op.getCharId());
     } else if (operation instanceof InsertBlockOperation) {
         document.apply((InsertBlockOperation) operation);
     } else if (operation instanceof DeleteBlockOperation) {
