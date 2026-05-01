@@ -64,6 +64,14 @@ public class EditorUI extends JFrame {
         setVisible(true);
     }
 
+    @Override
+    protected void processWindowEvent(java.awt.event.WindowEvent e) {
+        if (e.getID() == java.awt.event.WindowEvent.WINDOW_CLOSING) {
+            sendLeaveMessage();
+        }
+        super.processWindowEvent(e);
+    }
+
     private void initPhase1Core() {
         document = new Document();
         remoteCursors = new HashMap<>();
@@ -296,7 +304,14 @@ public class EditorUI extends JFrame {
     // ------------------------------------------------------------------ //
  
     private void addUserToPanel(CursorInfo cursor) {
-        JLabel label = new JLabel("● " + cursor.username);
+        JLabel existingLabel = userLabels.get(cursor.userId);
+        if (existingLabel != null) {
+            existingLabel.setText("* " + cursor.username);
+            existingLabel.setForeground(cursor.color);
+            return;
+        }
+
+        JLabel label = new JLabel("* " + cursor.username);
         label.setForeground(cursor.color);
         userLabels.put(cursor.userId, label);
         usersPanel.add(label);
@@ -333,6 +348,8 @@ public class EditorUI extends JFrame {
                     setStatus("Connected to " + HOST + ":" + PORT);
                     connectButton.setText("Disconnect");
                     textPane.setEditable(true);
+                    addUserToPanel(new CursorInfo(localUserId, getUsername(), textPane.getCaretPosition()));
+                    wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername()));
                 });
             }
 
@@ -357,8 +374,15 @@ public class EditorUI extends JFrame {
 
     /// Integration: ADDED - Disconnect from server
     private void disconnectFromServer() {
+        sendLeaveMessage();
         if (wsClient != null) {
             wsClient.disconnect();
+        }
+    }
+
+    private void sendLeaveMessage() {
+        if (wsClient != null && wsClient.isConnected()) {
+            wsClient.sendMessage(MessageHandler.leaveToMessage(localUserId));
         }
     }
 
@@ -366,9 +390,41 @@ public class EditorUI extends JFrame {
     private void handleRemoteMessage(String message) {
         System.out.println(">>> Remote message: " + message);
 
+        if (MessageHandler.isJoinMessage(message)) {
+            int userId = MessageHandler.getPresenceUserId(message);
+            if (userId == localUserId) {
+                return;
+            }
+
+            String username = MessageHandler.getPresenceUsername(message);
+            CursorInfo cursor = remoteCursors.get(userId);
+            if (cursor == null) {
+                cursor = new CursorInfo(userId, username, 0);
+                remoteCursors.put(userId, cursor);
+                if (wsClient != null && wsClient.isConnected()) {
+                    wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername()));
+                }
+            }
+            addUserToPanel(cursor);
+            refreshTextFromDocument();
+            return;
+        }
+
+        if (MessageHandler.isLeaveMessage(message)) {
+            int userId = MessageHandler.getPresenceUserId(message);
+            remoteCursors.remove(userId);
+            removeUserFromPanel(userId);
+            refreshTextFromDocument();
+            return;
+        }
+
          // Handle cursor message separately
         if (MessageHandler.isCursorMessage(message)) {
             int userId = MessageHandler.getCursorUserId(message);
+            if (userId == localUserId) {
+                return;
+            }
+
             String username = MessageHandler.getCursorUsername(message);
             int position = MessageHandler.getCursorPosition(message);
                 if (!remoteCursors.containsKey(userId)) {

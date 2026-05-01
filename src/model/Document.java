@@ -8,19 +8,10 @@ import operations.DeleteBlockOperation;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
 import operations.InsertCharacterOperation;
-import network.MessageHandler;
-import network.WebSocketClient;
 
 public class Document {
 
     private BlockCRDT blockCRDT; // manages the ordering of blocks
-
-    // NEW: WebSocket client for network communication
-    private WebSocketClient wsClient;
-
-    // NEW: Flag to track if we're applying a remote operation (to prevent infinite
-    // loops)
-    private boolean isRemoteOperation = false;
 
     public Document() {
         blockCRDT = new BlockCRDT();
@@ -31,45 +22,16 @@ public class Document {
         blockCRDT.addRoot(initialBlock);
     }
 
-    // Set the WebSocket client for this document
-    public void setWebSocketClient(WebSocketClient client) {
-        this.wsClient = client;
-    }
-
     // Apply an operation that came from another user (remote)
     public void applyRemote(Object operation) {
-        isRemoteOperation = true;
-
-        try {
-            if (operation instanceof InsertCharacterOperation) {
-                InsertCharacterOperation op = (InsertCharacterOperation) operation;
-                Block currBlock = blockCRDT.getBlock(op.getBlockId());
-                if (currBlock != null && !currBlock.isDeleted()) {
-                    currBlock.getCharCRDT().insert(
-                            op.getUserId(),
-                            op.getClock(),
-                            op.getValue(),
-                            op.getParentCharId());
-                }
-            } else if (operation instanceof DeleteCharacterOperation) {
-                DeleteCharacterOperation op = (DeleteCharacterOperation) operation;
-                Block currBlock = blockCRDT.getBlock(op.getBlockId());
-                if (currBlock != null && !currBlock.isDeleted()) {
-                    currBlock.getCharCRDT().delete(op.getCharId());
-                }
-            } else if (operation instanceof InsertBlockOperation) {
-                InsertBlockOperation op = (InsertBlockOperation) operation;
-                blockCRDT.insert(
-                        op.getUserId(),
-                        op.getClock(),
-                        op.getBlockId(),
-                        op.getAfterBlockId());
-            } else if (operation instanceof DeleteBlockOperation) {
-                DeleteBlockOperation op = (DeleteBlockOperation) operation;
-                blockCRDT.delete(op.getBlockId());
-            }
-        } finally {
-            isRemoteOperation = false;
+        if (operation instanceof InsertCharacterOperation) {
+            apply((InsertCharacterOperation) operation);
+        } else if (operation instanceof DeleteCharacterOperation) {
+            apply((DeleteCharacterOperation) operation);
+        } else if (operation instanceof InsertBlockOperation) {
+            apply((InsertBlockOperation) operation);
+        } else if (operation instanceof DeleteBlockOperation) {
+            apply((DeleteBlockOperation) operation);
         }
     }
 
@@ -77,23 +39,11 @@ public class Document {
     public void apply(InsertBlockOperation myOperation) {
         blockCRDT.insert(myOperation.getUserId(), myOperation.getClock(), myOperation.getBlockId(),
                 myOperation.getAfterBlockId());
-
-        // Broadcast to other users
-        if (!isRemoteOperation && wsClient != null && wsClient.isConnected()) {
-            String message = MessageHandler.operationToMessage(myOperation);
-            wsClient.sendMessage(message);
-        }
     }
 
     // Marks a block as deleted (tombstone)
     public void apply(DeleteBlockOperation myOperation) {
         blockCRDT.delete(myOperation.getBlockId());
-
-        // Broadcast to other users
-        if (!isRemoteOperation && wsClient != null && wsClient.isConnected()) {
-            String message = MessageHandler.operationToMessage(myOperation);
-            wsClient.sendMessage(message);
-        }
     }
 
     // Gets the correct block and calls the insert crdt function
@@ -107,12 +57,6 @@ public class Document {
                     myOperation.getValue(),
                     myOperation.getParentCharId());
         }
-
-        // Broadcast to other users
-        if (!isRemoteOperation && wsClient != null && wsClient.isConnected()) {
-            String message = MessageHandler.operationToMessage(myOperation);
-            wsClient.sendMessage(message);
-        }
     }
 
     // Gets block then make the character deleted
@@ -121,12 +65,6 @@ public class Document {
 
         if (currBlock != null) {
             currBlock.getCharCRDT().delete(myOperation.getCharId());
-        }
-
-        // Broadcast to other users
-        if (!isRemoteOperation && wsClient != null && wsClient.isConnected()) {
-            String message = MessageHandler.operationToMessage(myOperation);
-            wsClient.sendMessage(message);
         }
     }
 

@@ -65,6 +65,21 @@ public class MessageHandler {
         return gson.toJson(json);
     }
 
+    public static String joinToMessage(int userId, String username) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "JOIN");
+        json.addProperty("userId", userId);
+        json.addProperty("username", username);
+        return gson.toJson(json);
+    }
+
+    public static String leaveToMessage(int userId) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "LEAVE");
+        json.addProperty("userId", userId);
+        return gson.toJson(json);
+    }
+
     
     // ========== CONVERT JSON STRING TO OPERATION ==========
     public static Object messageToOperation(String message) {
@@ -112,9 +127,21 @@ public class MessageHandler {
     }
      // ========== CHECK IF MESSAGE IS CURSOR ==========
     public static boolean isCursorMessage(String message) {
+        return isMessageType(message, "CURSOR");
+    }
+
+    public static boolean isJoinMessage(String message) {
+        return isMessageType(message, "JOIN");
+    }
+
+    public static boolean isLeaveMessage(String message) {
+        return isMessageType(message, "LEAVE");
+    }
+
+    private static boolean isMessageType(String message, String expectedType) {
         try {
             JsonObject json = JsonParser.parseString(message).getAsJsonObject();
-            return "CURSOR".equals(json.get("type").getAsString());
+            return expectedType.equals(json.get("type").getAsString());
         } catch (Exception e) {
             return false;
         }
@@ -123,8 +150,16 @@ public class MessageHandler {
     public static int getCursorUserId(String message) {
         return JsonParser.parseString(message).getAsJsonObject().get("userId").getAsInt();
     }
+
+    public static int getPresenceUserId(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("userId").getAsInt();
+    }
  
     public static String getCursorUsername(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("username").getAsString();
+    }
+
+    public static String getPresenceUsername(String message) {
         return JsonParser.parseString(message).getAsJsonObject().get("username").getAsString();
     }
  

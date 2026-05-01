@@ -4,7 +4,6 @@ import model.Document;
 import network.WebSocketClient;
 import network.MessageHandler;
 import operations.InsertCharacterOperation;
-import operations.DeleteCharacterOperation;
 
 public class ClientLauncher {
     private static int clock = 0;
@@ -29,13 +28,11 @@ public class ClientLauncher {
             @Override
             public void onConnected() {
                 System.out.println("✓ Connected to server!");
-                // FIXED: Use clientHolder[0] instead of 'client'
-                doc.setWebSocketClient(clientHolder[0]);
 
                 System.out.println("Creating initial block...");
 
                 // Simulate user typing
-                simulateUserTyping(doc);
+                simulateUserTyping(doc, clientHolder[0]);
             }
 
             @Override
@@ -58,7 +55,7 @@ public class ClientLauncher {
         }
     }
 
-    private static void simulateUserTyping(Document doc) {
+    private static void simulateUserTyping(Document doc, WebSocketClient client) {
         try {
             Thread.sleep(1000);
 
@@ -70,7 +67,7 @@ public class ClientLauncher {
             clock++;
             InsertCharacterOperation op1 = new InsertCharacterOperation(1, clock, 'H', null, "block-1");
             System.out.println("Local insert: 'H' (id: 1-" + clock + ", parent: null)");
-            doc.apply(op1);
+            applyAndSend(doc, client, op1);
             lastId = "1-" + clock;
             Thread.sleep(500);
 
@@ -78,7 +75,7 @@ public class ClientLauncher {
             clock++;
             InsertCharacterOperation op2 = new InsertCharacterOperation(1, clock, 'e', lastId, "block-1");
             System.out.println("Local insert: 'e' (id: 1-" + clock + ", parent: " + lastId + ")");
-            doc.apply(op2);
+            applyAndSend(doc, client, op2);
             lastId = "1-" + clock;
             Thread.sleep(500);
 
@@ -86,7 +83,7 @@ public class ClientLauncher {
             clock++;
             InsertCharacterOperation op3 = new InsertCharacterOperation(1, clock, 'l', lastId, "block-1");
             System.out.println("Local insert: 'l' (id: 1-" + clock + ", parent: " + lastId + ")");
-            doc.apply(op3);
+            applyAndSend(doc, client, op3);
             lastId = "1-" + clock;
             Thread.sleep(500);
 
@@ -94,7 +91,7 @@ public class ClientLauncher {
             clock++;
             InsertCharacterOperation op4 = new InsertCharacterOperation(1, clock, 'l', lastId, "block-1");
             System.out.println("Local insert: 'l' (id: 1-" + clock + ", parent: " + lastId + ")");
-            doc.apply(op4);
+            applyAndSend(doc, client, op4);
             lastId = "1-" + clock;
             Thread.sleep(500);
 
@@ -102,7 +99,7 @@ public class ClientLauncher {
             clock++;
             InsertCharacterOperation op5 = new InsertCharacterOperation(1, clock, 'o', lastId, "block-1");
             System.out.println("Local insert: 'o' (id: 1-" + clock + ", parent: " + lastId + ")");
-            doc.apply(op5);
+            applyAndSend(doc, client, op5);
 
             System.out.println("\n=== FINAL RESULT ===");
             System.out.println("Final text: \"" + doc.getText() + "\"");
@@ -116,6 +113,13 @@ public class ClientLauncher {
 
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void applyAndSend(Document doc, WebSocketClient client, Object operation) {
+        doc.applyRemote(operation);
+        if (client != null && client.isConnected()) {
+            client.sendMessage(MessageHandler.operationToMessage(operation));
         }
     }
 }
