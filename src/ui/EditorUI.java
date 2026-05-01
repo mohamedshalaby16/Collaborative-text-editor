@@ -43,6 +43,7 @@ public class EditorUI extends JFrame {
 
     // Cursor tracking: userId -> CursorInfo
     private Map<Integer, CursorInfo> remoteCursors;
+    private java.util.List<Object> remoteCursorHighlightTags;
 
     /// Integration: Network client and connection state
     private WebSocketClient wsClient;
@@ -75,6 +76,7 @@ public class EditorUI extends JFrame {
     private void initPhase1Core() {
         document = new Document();
         remoteCursors = new HashMap<>();
+        remoteCursorHighlightTags = new ArrayList<>();
         userLabels = new HashMap<>();
 
         // Create one default block
@@ -130,7 +132,8 @@ public class EditorUI extends JFrame {
         textPane.addCaretListener(e -> {
             if (!isRemoteUpdate && isConnected) {
                 int position = e.getDot();
-                String message = MessageHandler.cursorToMessage(localUserId, getUsername(), position);
+                String anchorCharId = document.getCharIdBeforeOffset(blockId, position);
+                String message = MessageHandler.cursorToMessage(localUserId, getUsername(), position, anchorCharId);
                 wsClient.sendMessage(message);
             }
         });
@@ -266,8 +269,7 @@ public class EditorUI extends JFrame {
     // ------------------------------------------------------------------ //
  
     /**
-     * Repaints the text with all remote cursors highlighted.
-     * Each remote user gets a colored background at their caret position.
+     * Repaints the text and draws remote cursors as thin caret markers.
      */
     private void refreshTextFromDocument() {
         refreshTextFromDocument(textPane.getCaretPosition());
@@ -280,23 +282,70 @@ public class EditorUI extends JFrame {
     textPane.setCaretPosition(Math.max(0, Math.min(caretPosition, text.length())));
     isRemoteUpdate = false;
 
-    // Apply cursor highlights after text is fully rendered
+    // Apply cursor markers after text is fully rendered
     SwingUtilities.invokeLater(() -> {
-        StyledDocument styledDoc = textPane.getStyledDocument();
+        Highlighter highlighter = textPane.getHighlighter();
+        for (Object tag : remoteCursorHighlightTags) {
+            highlighter.removeHighlight(tag);
+        }
+        remoteCursorHighlightTags.clear();
+
+        java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
         for (CursorInfo cursor : remoteCursors.values()) {
-            int pos = cursor.position;
-            if (text.length() == 0) continue;
-             int highlightPos = Math.min(pos, text.length() - 1);
-              if (highlightPos >= 0) {
-            Style cursorStyle = textPane.addStyle("cursor-" + cursor.userId, null);
-            StyleConstants.setBackground(cursorStyle, cursor.color);
-            styledDoc.setCharacterAttributes(highlightPos, 1, cursorStyle, false);
-            
-             }
+            int cursorPosition = getRemoteCursorPosition(cursor, visibleIds, text.length());
+            try {
+                Object tag = highlighter.addHighlight(
+                        cursorPosition,
+                        cursorPosition,
+                        new RemoteCursorPainter(cursor.color));
+                remoteCursorHighlightTags.add(tag);
+            } catch (BadLocationException e) {
+                System.out.println("Failed to draw remote cursor: " + e.getMessage());
+            }
          }
         
     });
 }
+
+    private int getRemoteCursorPosition(CursorInfo cursor, java.util.List<String> visibleIds, int textLength) {
+        if (cursor.anchorCharId != null) {
+            int index = visibleIds.indexOf(cursor.anchorCharId);
+            if (index >= 0) {
+                return Math.min(index + 1, textLength);
+            }
+        }
+
+        return Math.max(0, Math.min(cursor.position, textLength));
+    }
+
+    private static class RemoteCursorPainter extends LayeredHighlighter.LayerPainter {
+        private final Color color;
+
+        RemoteCursorPainter(Color color) {
+            this.color = color;
+        }
+
+        @Override
+        public void paint(Graphics g, int p0, int p1, Shape bounds, JTextComponent c) {
+            paintCaret(g, c, p0);
+        }
+
+        @Override
+        public Shape paintLayer(Graphics g, int p0, int p1, Shape bounds, JTextComponent c, View view) {
+            return paintCaret(g, c, p0);
+        }
+
+        private Shape paintCaret(Graphics g, JTextComponent c, int position) {
+            try {
+                Rectangle rect = c.modelToView2D(position).getBounds();
+                g.setColor(color);
+                g.fillRect(rect.x, rect.y, 2, rect.height);
+                return rect;
+            } catch (BadLocationException e) {
+                return null;
+            }
+        }
+    }
 
  
     // ------------------------------------------------------------------ //
@@ -427,14 +476,17 @@ public class EditorUI extends JFrame {
 
             String username = MessageHandler.getCursorUsername(message);
             int position = MessageHandler.getCursorPosition(message);
+            String anchorCharId = MessageHandler.getCursorAnchorCharId(message);
                 if (!remoteCursors.containsKey(userId)) {
                 // New user — create cursor and add to users panel
-                CursorInfo cursor = new CursorInfo(userId, username, position);
+                CursorInfo cursor = new CursorInfo(userId, username, position, anchorCharId);
                 remoteCursors.put(userId, cursor);
                 addUserToPanel(cursor);
             } else {
                 // Existing user — just update position
-                remoteCursors.get(userId).position = position;
+                CursorInfo cursor = remoteCursors.get(userId);
+                cursor.position = position;
+                cursor.anchorCharId = anchorCharId;
             }
  
             refreshTextFromDocument();

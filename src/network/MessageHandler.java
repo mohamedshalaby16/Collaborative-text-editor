@@ -57,11 +57,16 @@ public class MessageHandler {
 
         // ========== CURSOR MESSAGE ==========
     public static String cursorToMessage(int userId, String username, int position) {
+        return cursorToMessage(userId, username, position, null);
+    }
+
+    public static String cursorToMessage(int userId, String username, int position, String anchorCharId) {
         JsonObject json = new JsonObject();
         json.addProperty("type", "CURSOR");
         json.addProperty("userId", userId);
         json.addProperty("username", username);
         json.addProperty("position", position);
+        json.addProperty("anchorCharId", anchorCharId);
         return gson.toJson(json);
     }
 
@@ -165,5 +170,13 @@ public class MessageHandler {
  
     public static int getCursorPosition(String message) {
         return JsonParser.parseString(message).getAsJsonObject().get("position").getAsInt();
+    }
+
+    public static String getCursorAnchorCharId(String message) {
+        JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+        if (!json.has("anchorCharId") || json.get("anchorCharId").isJsonNull()) {
+            return null;
+        }
+        return json.get("anchorCharId").getAsString();
     }
 }
