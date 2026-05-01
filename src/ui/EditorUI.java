@@ -221,7 +221,7 @@ public class EditorUI extends JFrame {
             }
         }
         System.out.println("Document text after insert = [" + document.getText() + "]");
-        refreshTextFromDocument();
+        refreshTextFromDocument(offset + text.length());
     }
 
     private void handleDeleteRange(int offset, int length) {
@@ -250,7 +250,7 @@ public class EditorUI extends JFrame {
             }
         }
         System.out.println("Document text after delete = [" + document.getText() + "]");
-        refreshTextFromDocument();
+        refreshTextFromDocument(offset);
     }
 
 // ------------------------------------------------------------------ //
@@ -262,9 +262,14 @@ public class EditorUI extends JFrame {
      * Each remote user gets a colored background at their caret position.
      */
     private void refreshTextFromDocument() {
+        refreshTextFromDocument(textPane.getCaretPosition());
+    }
+
+    private void refreshTextFromDocument(int caretPosition) {
     isRemoteUpdate = true;
     String text = document.getText();
     textPane.setText(text);
+    textPane.setCaretPosition(Math.max(0, Math.min(caretPosition, text.length())));
     isRemoteUpdate = false;
 
     // Apply cursor highlights after text is fully rendered
