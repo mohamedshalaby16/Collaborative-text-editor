@@ -57,11 +57,31 @@ public class MessageHandler {
 
         // ========== CURSOR MESSAGE ==========
     public static String cursorToMessage(int userId, String username, int position) {
+        return cursorToMessage(userId, username, position, null);
+    }
+
+    public static String cursorToMessage(int userId, String username, int position, String anchorCharId) {
         JsonObject json = new JsonObject();
         json.addProperty("type", "CURSOR");
         json.addProperty("userId", userId);
         json.addProperty("username", username);
         json.addProperty("position", position);
+        json.addProperty("anchorCharId", anchorCharId);
+        return gson.toJson(json);
+    }
+
+    public static String joinToMessage(int userId, String username) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "JOIN");
+        json.addProperty("userId", userId);
+        json.addProperty("username", username);
+        return gson.toJson(json);
+    }
+
+    public static String leaveToMessage(int userId) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "LEAVE");
+        json.addProperty("userId", userId);
         return gson.toJson(json);
     }
 
@@ -112,9 +132,21 @@ public class MessageHandler {
     }
      // ========== CHECK IF MESSAGE IS CURSOR ==========
     public static boolean isCursorMessage(String message) {
+        return isMessageType(message, "CURSOR");
+    }
+
+    public static boolean isJoinMessage(String message) {
+        return isMessageType(message, "JOIN");
+    }
+
+    public static boolean isLeaveMessage(String message) {
+        return isMessageType(message, "LEAVE");
+    }
+
+    private static boolean isMessageType(String message, String expectedType) {
         try {
             JsonObject json = JsonParser.parseString(message).getAsJsonObject();
-            return "CURSOR".equals(json.get("type").getAsString());
+            return expectedType.equals(json.get("type").getAsString());
         } catch (Exception e) {
             return false;
         }
@@ -123,12 +155,28 @@ public class MessageHandler {
     public static int getCursorUserId(String message) {
         return JsonParser.parseString(message).getAsJsonObject().get("userId").getAsInt();
     }
+
+    public static int getPresenceUserId(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("userId").getAsInt();
+    }
  
     public static String getCursorUsername(String message) {
+        return JsonParser.parseString(message).getAsJsonObject().get("username").getAsString();
+    }
+
+    public static String getPresenceUsername(String message) {
         return JsonParser.parseString(message).getAsJsonObject().get("username").getAsString();
     }
  
     public static int getCursorPosition(String message) {
         return JsonParser.parseString(message).getAsJsonObject().get("position").getAsInt();
+    }
+
+    public static String getCursorAnchorCharId(String message) {
+        JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+        if (!json.has("anchorCharId") || json.get("anchorCharId").isJsonNull()) {
+            return null;
+        }
+        return json.get("anchorCharId").getAsString();
     }
 }

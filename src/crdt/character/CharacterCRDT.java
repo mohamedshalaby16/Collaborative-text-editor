@@ -72,6 +72,16 @@ public class CharacterCRDT {
         return result.toString();
     }
 
+    public List<String> getVisibleCharacterIds() {
+        List<String> result = new ArrayList<>();
+
+        for (CRDTNode node : roots) {
+            buildVisibleIds(node, result);
+        }
+
+        return result;
+    }
+
     private void buildText(CRDTNode node, StringBuilder result) {
         if (!node.del) {
             result.append(node.value);
@@ -79,6 +89,16 @@ public class CharacterCRDT {
 
         for (CRDTNode child : node.children) {
             buildText(child, result);
+        }
+    }
+
+    private void buildVisibleIds(CRDTNode node, List<String> result) {
+        if (!node.del) {
+            result.add(node.getId());
+        }
+
+        for (CRDTNode child : node.children) {
+            buildVisibleIds(child, result);
         }
     }
 
