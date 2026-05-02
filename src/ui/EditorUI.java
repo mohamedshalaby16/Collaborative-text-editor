@@ -6,10 +6,9 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.swing.*;
 import javax.swing.text.*;
- /// Integration: Added for real network communication
 import model.CursorInfo;
- /// Integration: Added for converting operations to/from messages
 import model.Document;
+import model.UserRole;
 import network.MessageHandler;
 import network.WebSocketClient;
 import operations.DeleteBlockOperation;
@@ -19,41 +18,46 @@ import operations.InsertCharacterOperation;
 
 public class EditorUI extends JFrame {
 
-    private final String HOST = "localhost";
-    private final int PORT = 9091;
-    /// Integration: Make sure server uses same port
+    // Connection configuration fields
+    private JTextField hostField;
+    private JTextField portField;
+
+    // Document management fields
+    private JTextField documentCodeField;
+    private JButton createDocButton;
+    private JButton joinDocButton;
+    private String currentDocumentId;
+    private UserRole currentUserRole;
+    private String currentShareCode;
 
     private JTextPane textPane;
     private JTextField usernameField;
     private JButton connectButton;
     private JLabel statusLabel;
 
-     // Active users panel
     private JPanel usersPanel;
     private JLabel usersTitle;
-    private Map<Integer, JLabel> userLabels; // userId -> label in the panel
+    private Map<Integer, JLabel> userLabels;
 
     private boolean isRemoteUpdate = false;
 
-    // Phase 1 integration
     private Document document;
     private final String blockId = "block-1";
-    private int localUserId ;
+    private int localUserId;
     private int localClock = 0;
 
-    // Cursor tracking: userId -> CursorInfo
     private Map<Integer, CursorInfo> remoteCursors;
     private java.util.List<Object> remoteCursorHighlightTags;
 
-    /// Integration: Network client and connection state
     private WebSocketClient wsClient;
     private boolean isConnected = false;
 
     public EditorUI() {
-        localUserId = (int) (Math.random()*100000);
+        localUserId = (int) (Math.random() * 100000);
+        currentUserRole = UserRole.VIEWER; // default until joined
 
-        setTitle("Collaborative Text Editor");
-        setSize(800, 600);
+        setTitle("Collaborative Text Editor - Phase 3");
+        setSize(1000, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -78,8 +82,6 @@ public class EditorUI extends JFrame {
         remoteCursors = new HashMap<>();
         remoteCursorHighlightTags = new ArrayList<>();
         userLabels = new HashMap<>();
-
-        // Create one default block
         document.apply(new InsertBlockOperation(blockId, null, localUserId, localClock));
         localClock++;
     }
@@ -88,7 +90,14 @@ public class EditorUI extends JFrame {
         textPane = new JTextPane();
         textPane.setEditable(false);
 
-        usernameField = new JTextField("user1", 10);
+        usernameField = new JTextField("user" + localUserId, 8);
+        hostField = new JTextField("localhost", 10);
+        portField = new JTextField("9091", 5);
+
+        documentCodeField = new JTextField(15);
+        createDocButton = new JButton("Create New Doc");
+        joinDocButton = new JButton("Join with Code");
+
         connectButton = new JButton("Connect");
         statusLabel = new JLabel("Not connected");
 
@@ -96,20 +105,37 @@ public class EditorUI extends JFrame {
         usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.Y_AXIS));
         usersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         usersPanel.setPreferredSize(new Dimension(150, 0));
- 
+
         usersTitle = new JLabel("Active Users");
         usersTitle.setFont(usersTitle.getFont().deriveFont(Font.BOLD));
         usersPanel.add(usersTitle);
         usersPanel.add(Box.createVerticalStrut(8));
+
+        // Initially disable join buttons until connected
+        createDocButton.setEnabled(false);
+        joinDocButton.setEnabled(false);
     }
 
     private void layoutComponents() {
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
+        // Connection row
+        topPanel.add(new JLabel("Host:"));
+        topPanel.add(hostField);
+        topPanel.add(new JLabel("Port:"));
+        topPanel.add(portField);
         topPanel.add(new JLabel("Username:"));
         topPanel.add(usernameField);
         topPanel.add(connectButton);
         topPanel.add(statusLabel);
+
+        topPanel.add(Box.createHorizontalStrut(20));
+
+        // Document management row
+        topPanel.add(createDocButton);
+        topPanel.add(new JLabel("Join Code:"));
+        topPanel.add(documentCodeField);
+        topPanel.add(joinDocButton);
 
         JScrollPane scrollPane = new JScrollPane(textPane);
 
@@ -120,7 +146,6 @@ public class EditorUI extends JFrame {
     }
 
     private void addListeners() {
-        /// Integration: REPLACED - Now connects to real server instead of simulating
         connectButton.addActionListener(e -> {
             if (!isConnected) {
                 connectToServer();
@@ -128,25 +153,28 @@ public class EditorUI extends JFrame {
                 disconnectFromServer();
             }
         });
-         // Send cursor position whenever caret moves
+
+        createDocButton.addActionListener(e -> createNewDocument());
+        joinDocButton.addActionListener(e -> joinDocumentWithCode());
+
         textPane.addCaretListener(e -> {
-            if (!isRemoteUpdate && isConnected) {
+            if (!isRemoteUpdate && isConnected && currentUserRole == UserRole.EDITOR) {
                 int position = e.getDot();
                 String anchorCharId = document.getCharIdBeforeOffset(blockId, position);
-                String message = MessageHandler.cursorToMessage(localUserId, getUsername(), position, anchorCharId);
+                String message = MessageHandler.cursorToMessage(localUserId, getUsername(), position, anchorCharId,
+                        currentDocumentId);
                 wsClient.sendMessage(message);
             }
         });
 
         AbstractDocument doc = (AbstractDocument) textPane.getDocument();
         doc.setDocumentFilter(new DocumentFilter() {
-
             @Override
             public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr)
                     throws BadLocationException {
                 if (isRemoteUpdate) {
                     super.insertString(fb, offset, string, attr);
-                } else {
+                } else if (currentUserRole == UserRole.EDITOR) {
                     handleInsert(offset, string);
                 }
             }
@@ -156,7 +184,7 @@ public class EditorUI extends JFrame {
                     throws BadLocationException {
                 if (isRemoteUpdate) {
                     super.remove(fb, offset, length);
-                } else {
+                } else if (currentUserRole == UserRole.EDITOR) {
                     handleRemove(offset, length);
                 }
             }
@@ -164,29 +192,24 @@ public class EditorUI extends JFrame {
             @Override
             public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs)
                     throws BadLocationException {
-
                 if (isRemoteUpdate) {
                     super.replace(fb, offset, length, text, attrs);
                     return;
                 }
+                if (currentUserRole != UserRole.EDITOR)
+                    return;
 
-                // Case 1: pure typing
                 if (length == 0 && text != null && !text.isEmpty()) {
                     handleInsert(offset, text);
                     return;
                 }
-
-                // Case 2: pure delete
                 if (length > 0 && (text == null || text.isEmpty())) {
                     handleDeleteRange(offset, length);
                     return;
                 }
-
-                // Case 3: replace selected text
                 if (length > 0) {
                     handleDeleteRange(offset, length);
                 }
-
                 if (text != null && !text.isEmpty()) {
                     handleInsert(offset, text);
                 }
@@ -194,127 +217,120 @@ public class EditorUI extends JFrame {
         });
     }
 
-    private void handleInsert(int offset, String string) {
-        if (isRemoteUpdate || string == null || string.isEmpty()) {
+    private void createNewDocument() {
+        if (!isConnected || wsClient == null) {
+            setStatus("Not connected to server!");
             return;
         }
 
+        String message = MessageHandler.createSessionMessage(localUserId, getUsername());
+        wsClient.sendMessage(message);
+        setStatus("Creating new document...");
+    }
+
+    private void joinDocumentWithCode() {
+        if (!isConnected || wsClient == null) {
+            setStatus("Not connected to server!");
+            return;
+        }
+
+        String code = documentCodeField.getText().trim();
+        if (code.isEmpty()) {
+            setStatus("Please enter a share code!");
+            return;
+        }
+
+        String message = MessageHandler.joinSessionMessage(localUserId, getUsername(), code);
+        wsClient.sendMessage(message);
+        setStatus("Joining document with code: " + code);
+    }
+
+    private void handleInsert(int offset, String string) {
+        if (isRemoteUpdate || string == null || string.isEmpty())
+            return;
         handleInsertAtOffset(offset, string);
     }
 
     private void handleRemove(int offset, int length) {
-        if (isRemoteUpdate || length <= 0) {
+        if (isRemoteUpdate || length <= 0)
             return;
-        }
-
         handleDeleteRange(offset, length);
     }
 
     private void handleInsertAtOffset(int offset, String text) {
         String parentId = document.getCharIdBeforeOffset(blockId, offset);
-
         for (int i = 0; i < text.length(); i++) {
             char value = text.charAt(i);
-
             InsertCharacterOperation op = new InsertCharacterOperation(localUserId, localClock, value, parentId,
                     blockId);
-
             document.apply(op);
-
             parentId = op.getCharId();
             localClock++;
-
-            /// Integration: REPLACED - Now sends real message instead of simulateSend
             if (wsClient != null && wsClient.isConnected()) {
-                String message = MessageHandler.operationToMessage(op);
+                String message = MessageHandler.operationToMessage(op, currentDocumentId);
                 wsClient.sendMessage(message);
-                System.out.println("Sent: " + message);
             }
         }
-        System.out.println("Document text after insert = [" + document.getText() + "]");
         refreshTextFromDocument(offset + text.length());
     }
 
     private void handleDeleteRange(int offset, int length) {
         java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
         java.util.List<String> idsToDelete = new ArrayList<>();
-
         int end = Math.min(offset + length, visibleIds.size());
         for (int i = offset; i < end; i++) {
             idsToDelete.add(visibleIds.get(i));
         }
-
         for (String charId : idsToDelete) {
             String[] parts = charId.split("-");
             int userId = Integer.parseInt(parts[0]);
             int clock = Integer.parseInt(parts[1]);
-
             DeleteCharacterOperation op = new DeleteCharacterOperation(userId, clock, blockId);
-
             document.apply(op);
-
-            /// Integration: REPLACED - Now sends real message instead of simulateSend
             if (wsClient != null && wsClient.isConnected()) {
-                String message = MessageHandler.operationToMessage(op);
+                String message = MessageHandler.operationToMessage(op, currentDocumentId);
                 wsClient.sendMessage(message);
-                System.out.println("Sent: " + message);
             }
         }
-        System.out.println("Document text after delete = [" + document.getText() + "]");
         refreshTextFromDocument(offset);
     }
 
-// ------------------------------------------------------------------ //
-    //  Cursor rendering                                                    //
-    // ------------------------------------------------------------------ //
- 
-    /**
-     * Repaints the text and draws remote cursors as thin caret markers.
-     */
     private void refreshTextFromDocument() {
         refreshTextFromDocument(textPane.getCaretPosition());
     }
 
     private void refreshTextFromDocument(int caretPosition) {
-    isRemoteUpdate = true;
-    String text = document.getText();
-    textPane.setText(text);
-    textPane.setCaretPosition(Math.max(0, Math.min(caretPosition, text.length())));
-    isRemoteUpdate = false;
+        isRemoteUpdate = true;
+        String text = document.getText();
+        textPane.setText(text);
+        textPane.setCaretPosition(Math.max(0, Math.min(caretPosition, text.length())));
+        isRemoteUpdate = false;
 
-    // Apply cursor markers after text is fully rendered
-    SwingUtilities.invokeLater(() -> {
-        Highlighter highlighter = textPane.getHighlighter();
-        for (Object tag : remoteCursorHighlightTags) {
-            highlighter.removeHighlight(tag);
-        }
-        remoteCursorHighlightTags.clear();
-
-        java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
-        for (CursorInfo cursor : remoteCursors.values()) {
-            int cursorPosition = getRemoteCursorPosition(cursor, visibleIds, text.length());
-            try {
-                Object tag = highlighter.addHighlight(
-                        cursorPosition,
-                        cursorPosition,
-                        new RemoteCursorPainter(cursor.color));
-                remoteCursorHighlightTags.add(tag);
-            } catch (BadLocationException e) {
-                System.out.println("Failed to draw remote cursor: " + e.getMessage());
+        SwingUtilities.invokeLater(() -> {
+            Highlighter highlighter = textPane.getHighlighter();
+            for (Object tag : remoteCursorHighlightTags)
+                highlighter.removeHighlight(tag);
+            remoteCursorHighlightTags.clear();
+            java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
+            for (CursorInfo cursor : remoteCursors.values()) {
+                int cursorPosition = getRemoteCursorPosition(cursor, visibleIds, text.length());
+                try {
+                    Object tag = highlighter.addHighlight(cursorPosition, cursorPosition,
+                            new RemoteCursorPainter(cursor.color));
+                    remoteCursorHighlightTags.add(tag);
+                } catch (BadLocationException e) {
+                    System.out.println("Failed to draw remote cursor: " + e.getMessage());
+                }
             }
-         }
-        
-    });
-}
+        });
+    }
 
     private int getRemoteCursorPosition(CursorInfo cursor, java.util.List<String> visibleIds, int textLength) {
         if (cursor.anchorCharId != null) {
             int index = visibleIds.indexOf(cursor.anchorCharId);
-            if (index >= 0) {
+            if (index >= 0)
                 return Math.min(index + 1, textLength);
-            }
         }
-
         return Math.max(0, Math.min(cursor.position, textLength));
     }
 
@@ -347,11 +363,6 @@ public class EditorUI extends JFrame {
         }
     }
 
- 
-    // ------------------------------------------------------------------ //
-    //  Active users panel                                                  //
-    // ------------------------------------------------------------------ //
- 
     private void addUserToPanel(CursorInfo cursor) {
         JLabel existingLabel = userLabels.get(cursor.userId);
         if (existingLabel != null) {
@@ -359,7 +370,6 @@ public class EditorUI extends JFrame {
             existingLabel.setForeground(cursor.color);
             return;
         }
-
         JLabel label = new JLabel("* " + cursor.username);
         label.setForeground(cursor.color);
         userLabels.put(cursor.userId, label);
@@ -367,7 +377,7 @@ public class EditorUI extends JFrame {
         usersPanel.revalidate();
         usersPanel.repaint();
     }
- 
+
     private void removeUserFromPanel(int userId) {
         JLabel label = userLabels.remove(userId);
         if (label != null) {
@@ -376,29 +386,34 @@ public class EditorUI extends JFrame {
             usersPanel.repaint();
         }
     }
- 
 
-    /// Integration: REMOVED simulateSend method - no longer needed
-
-    /// Integration: ADDED - Connect to real server
     private void connectToServer() {
-        wsClient = new WebSocketClient(HOST, PORT, new WebSocketClient.MessageListener() {
+        String host = hostField.getText().trim();
+        int port;
+        try {
+            port = Integer.parseInt(portField.getText().trim());
+        } catch (NumberFormatException ex) {
+            setStatus("Invalid port number!");
+            return;
+        }
+
+        hostField.setEnabled(false);
+        portField.setEnabled(false);
+
+        wsClient = new WebSocketClient(host, port, new WebSocketClient.MessageListener() {
             @Override
             public void onMessageReceived(String message) {
-                SwingUtilities.invokeLater(() -> {
-                    handleRemoteMessage(message);
-                });
+                SwingUtilities.invokeLater(() -> handleRemoteMessage(message));
             }
 
             @Override
             public void onConnected() {
                 SwingUtilities.invokeLater(() -> {
                     isConnected = true;
-                    setStatus("Connected to " + HOST + ":" + PORT);
+                    setStatus("Connected to " + host + ":" + port);
                     connectButton.setText("Disconnect");
-                    textPane.setEditable(true);
-                    addUserToPanel(new CursorInfo(localUserId, getUsername(), textPane.getCaretPosition()));
-                    wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername()));
+                    createDocButton.setEnabled(true);
+                    joinDocButton.setEnabled(true);
                 });
             }
 
@@ -409,11 +424,14 @@ public class EditorUI extends JFrame {
                     setStatus("Disconnected");
                     connectButton.setText("Connect");
                     textPane.setEditable(false);
-                     // Clear remote cursors and users panel
-                     remoteCursors.clear();
-                        for (int uid : new ArrayList<>(userLabels.keySet())) {
+                    createDocButton.setEnabled(false);
+                    joinDocButton.setEnabled(false);
+                    hostField.setEnabled(true);
+                    portField.setEnabled(true);
+                    remoteCursors.clear();
+                    for (int uid : new ArrayList<>(userLabels.keySet())) {
                         removeUserFromPanel(uid);
-                     }
+                    }
                     refreshTextFromDocument();
                 });
             }
@@ -421,38 +439,71 @@ public class EditorUI extends JFrame {
         wsClient.connect();
     }
 
-    /// Integration: ADDED - Disconnect from server
     private void disconnectFromServer() {
         sendLeaveMessage();
-        if (wsClient != null) {
+        if (wsClient != null)
             wsClient.disconnect();
-        }
     }
 
     private void sendLeaveMessage() {
-        if (wsClient != null && wsClient.isConnected()) {
-            wsClient.sendMessage(MessageHandler.leaveToMessage(localUserId));
+        if (wsClient != null && wsClient.isConnected() && currentDocumentId != null) {
+            wsClient.sendMessage(MessageHandler.leaveToMessage(localUserId, currentDocumentId));
         }
     }
 
-    /// Integration: ADDED - Handle incoming remote messages
     private void handleRemoteMessage(String message) {
-        System.out.println(">>> Remote message: " + message);
+        // Handle session creation response
+        if (MessageHandler.isSessionCreatedMessage(message)) {
+            currentDocumentId = MessageHandler.getDocumentId(message);
+            currentShareCode = MessageHandler.getShareCode(message);
+            currentUserRole = UserRole.EDITOR;
+            textPane.setEditable(true);
+            setStatus("Document created! Share code: " + currentShareCode);
+            JOptionPane.showMessageDialog(this,
+                    "Document Created!\n\nShare this code with others:\n" + currentShareCode,
+                    "Document Created", JOptionPane.INFORMATION_MESSAGE);
+
+            // Send join message for this session
+            wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername(), currentDocumentId));
+            return;
+        }
+
+        // Handle join acceptance
+        if (MessageHandler.isJoinAcceptedMessage(message)) {
+            currentDocumentId = MessageHandler.getDocumentId(message);
+            String role = MessageHandler.getRole(message);
+            currentUserRole = "EDITOR".equals(role) ? UserRole.EDITOR : UserRole.VIEWER;
+
+            if (currentUserRole == UserRole.EDITOR) {
+                textPane.setEditable(true);
+                setStatus("Joined as EDITOR");
+            } else {
+                textPane.setEditable(false);
+                setStatus("Joined as VIEWER (read-only)");
+            }
+
+            // Send presence join
+            wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername(), currentDocumentId));
+            return;
+        }
+
+        // Handle join rejection
+        if (MessageHandler.isJoinRejectedMessage(message)) {
+            String reason = MessageHandler.getRejectionReason(message);
+            setStatus("Join failed: " + reason);
+            JOptionPane.showMessageDialog(this, "Failed to join: " + reason, "Join Failed", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
 
         if (MessageHandler.isJoinMessage(message)) {
             int userId = MessageHandler.getPresenceUserId(message);
-            if (userId == localUserId) {
+            if (userId == localUserId)
                 return;
-            }
-
             String username = MessageHandler.getPresenceUsername(message);
             CursorInfo cursor = remoteCursors.get(userId);
             if (cursor == null) {
                 cursor = new CursorInfo(userId, username, 0);
                 remoteCursors.put(userId, cursor);
-                if (wsClient != null && wsClient.isConnected()) {
-                    wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername()));
-                }
             }
             addUserToPanel(cursor);
             refreshTextFromDocument();
@@ -467,55 +518,39 @@ public class EditorUI extends JFrame {
             return;
         }
 
-         // Handle cursor message separately
         if (MessageHandler.isCursorMessage(message)) {
             int userId = MessageHandler.getCursorUserId(message);
-            if (userId == localUserId) {
+            if (userId == localUserId)
                 return;
-            }
-
             String username = MessageHandler.getCursorUsername(message);
             int position = MessageHandler.getCursorPosition(message);
             String anchorCharId = MessageHandler.getCursorAnchorCharId(message);
-                if (!remoteCursors.containsKey(userId)) {
-                // New user — create cursor and add to users panel
+            if (!remoteCursors.containsKey(userId)) {
                 CursorInfo cursor = new CursorInfo(userId, username, position, anchorCharId);
                 remoteCursors.put(userId, cursor);
                 addUserToPanel(cursor);
             } else {
-                // Existing user — just update position
                 CursorInfo cursor = remoteCursors.get(userId);
                 cursor.position = position;
                 cursor.anchorCharId = anchorCharId;
             }
- 
             refreshTextFromDocument();
             return;
         }
 
-          Object operation = MessageHandler.messageToOperation(message);
-
+        Object operation = MessageHandler.messageToOperation(message);
         if (operation != null) {
             if (operation instanceof InsertCharacterOperation) {
-         InsertCharacterOperation op = (InsertCharacterOperation) operation;
-        document.apply(op);
+                document.apply((InsertCharacterOperation) operation);
             } else if (operation instanceof DeleteCharacterOperation) {
-        DeleteCharacterOperation op = (DeleteCharacterOperation) operation;
-        document.apply(op);
-    } else if (operation instanceof InsertBlockOperation) {
-        document.apply((InsertBlockOperation) operation);
-    } else if (operation instanceof DeleteBlockOperation) {
-        document.apply((DeleteBlockOperation) operation);
-    }
-
-    refreshTextFromDocument();
-}
-    }
-
-    public void updateTextFromRemote(String text) {
-        isRemoteUpdate = true;
-        textPane.setText(text);
-        isRemoteUpdate = false;
+                document.apply((DeleteCharacterOperation) operation);
+            } else if (operation instanceof InsertBlockOperation) {
+                document.apply((InsertBlockOperation) operation);
+            } else if (operation instanceof DeleteBlockOperation) {
+                document.apply((DeleteBlockOperation) operation);
+            }
+            refreshTextFromDocument();
+        }
     }
 
     public String getUsername() {
@@ -534,14 +569,6 @@ public class EditorUI extends JFrame {
 
     public void setStatus(String status) {
         statusLabel.setText(status);
-    }
-
-    public JTextPane getTextPane() {
-        return textPane;
-    }
-
-    public JButton getConnectButton() {
-        return connectButton;
     }
 
     public static void main(String[] args) {
