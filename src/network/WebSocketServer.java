@@ -125,6 +125,7 @@ public class WebSocketServer {
             sender.currentSession = session;
             sender.currentDocumentId = session.getDocumentId();
             sender.userRole = UserRole.EDITOR;
+            session.addClient(sender);
             System.out.println("User " + username + " created document " + session.getDocumentId());
             return;
         }
@@ -147,6 +148,7 @@ public class WebSocketServer {
             sender.currentSession = session;
             sender.currentDocumentId = documentId;
             sender.userRole = role;
+            session.addClient(sender);
 
             // Send join acceptance with operation history
             String response = MessageHandler.joinAcceptedMessage(

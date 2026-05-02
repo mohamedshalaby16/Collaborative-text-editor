@@ -7,6 +7,7 @@ import operations.InsertCharacterOperation;
 
 public class ClientLauncher {
     private static int clock = 0;
+    private static final String DOCUMENT_ID = "block-1";
 
     public static void main(String[] args) {
         Document doc = new Document();
@@ -119,7 +120,7 @@ public class ClientLauncher {
     private static void applyAndSend(Document doc, WebSocketClient client, Object operation) {
         doc.applyRemote(operation);
         if (client != null && client.isConnected()) {
-            client.sendMessage(MessageHandler.operationToMessage(operation));
+            client.sendMessage(MessageHandler.operationToMessage(operation, DOCUMENT_ID));
         }
     }
 }
