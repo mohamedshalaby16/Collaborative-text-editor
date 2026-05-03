@@ -1,6 +1,6 @@
 package server;
 
-import network.ClientHandler;
+import network.WebSocketServer.ClientHandler;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 

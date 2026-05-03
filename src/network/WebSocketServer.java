@@ -125,6 +125,7 @@ public class WebSocketServer {
             sender.currentSession = session;
             sender.currentDocumentId = session.getDocumentId();
             sender.userRole = UserRole.EDITOR;
+            session.addClient(sender);
             System.out.println("User " + username + " created document " + session.getDocumentId());
             return;
         }
@@ -147,16 +148,16 @@ public class WebSocketServer {
             sender.currentSession = session;
             sender.currentDocumentId = documentId;
             sender.userRole = role;
+            session.addClient(sender);
 
             // Send join acceptance with operation history
             String response = MessageHandler.joinAcceptedMessage(
                     documentId,
                     role.toString(),
+                    role == UserRole.EDITOR ? session.getEditorCode() : null,
+                    role == UserRole.EDITOR ? session.getViewerCode() : null,
                     session.getOperationHistory());
             sender.sendMessage(response);
-
-            // Replay all past operations to the new joiner
-            session.replayHistoryTo(sender);
 
             System.out.println("User " + username + " joined document " + documentId + " as " + role);
             return;
@@ -182,6 +183,11 @@ public class WebSocketServer {
                 messageType.equals("DELETE_BLOCK"));
 
         if (isEdit) {
+            if (sender.userRole != UserRole.EDITOR) {
+                sender.sendMessage(MessageHandler.permissionDeniedMessage("Viewers cannot edit this document"));
+                System.out.println("Rejected edit from non-editor client: " + sender.getClientId());
+                return;
+            }
             session.saveOperation(message);
         }
 
