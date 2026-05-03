@@ -26,6 +26,10 @@ public class EditorUI extends JFrame {
     private JTextField documentCodeField;
     private JButton createDocButton;
     private JButton joinDocButton;
+    private JPanel shareCodesPanel;
+    private JTextField editorCodeField;
+    private JTextField viewerCodeField;
+    private JLabel roleLabel;
     private String currentDocumentId;
     private UserRole currentUserRole;
     private String currentShareCode;
@@ -51,6 +55,7 @@ public class EditorUI extends JFrame {
 
     private WebSocketClient wsClient;
     private boolean isConnected = false;
+    private long lastViewerEditWarningAt = 0;
 
     public EditorUI() {
         localUserId = (int) (Math.random() * 100000);
@@ -97,6 +102,18 @@ public class EditorUI extends JFrame {
         documentCodeField = new JTextField(15);
         createDocButton = new JButton("Create New Doc");
         joinDocButton = new JButton("Join with Code");
+        editorCodeField = new JTextField(10);
+        editorCodeField.setEditable(false);
+        viewerCodeField = new JTextField(10);
+        viewerCodeField.setEditable(false);
+        roleLabel = new JLabel("Role: none");
+
+        shareCodesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        shareCodesPanel.add(new JLabel("Editor Code:"));
+        shareCodesPanel.add(editorCodeField);
+        shareCodesPanel.add(new JLabel("Viewer Code:"));
+        shareCodesPanel.add(viewerCodeField);
+        shareCodesPanel.setVisible(false);
 
         connectButton = new JButton("Connect");
         statusLabel = new JLabel("Not connected");
@@ -117,25 +134,31 @@ public class EditorUI extends JFrame {
     }
 
     private void layoutComponents() {
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel topPanel = new JPanel();
+        topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 
         // Connection row
-        topPanel.add(new JLabel("Host:"));
-        topPanel.add(hostField);
-        topPanel.add(new JLabel("Port:"));
-        topPanel.add(portField);
-        topPanel.add(new JLabel("Username:"));
-        topPanel.add(usernameField);
-        topPanel.add(connectButton);
-        topPanel.add(statusLabel);
-
-        topPanel.add(Box.createHorizontalStrut(20));
+        JPanel connectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        connectionRow.add(new JLabel("Host:"));
+        connectionRow.add(hostField);
+        connectionRow.add(new JLabel("Port:"));
+        connectionRow.add(portField);
+        connectionRow.add(new JLabel("Username:"));
+        connectionRow.add(usernameField);
+        connectionRow.add(connectButton);
+        connectionRow.add(statusLabel);
 
         // Document management row
-        topPanel.add(createDocButton);
-        topPanel.add(new JLabel("Join Code:"));
-        topPanel.add(documentCodeField);
-        topPanel.add(joinDocButton);
+        JPanel documentRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        documentRow.add(createDocButton);
+        documentRow.add(new JLabel("Join Code:"));
+        documentRow.add(documentCodeField);
+        documentRow.add(joinDocButton);
+        documentRow.add(roleLabel);
+        documentRow.add(shareCodesPanel);
+
+        topPanel.add(connectionRow);
+        topPanel.add(documentRow);
 
         JScrollPane scrollPane = new JScrollPane(textPane);
 
@@ -157,6 +180,22 @@ public class EditorUI extends JFrame {
         createDocButton.addActionListener(e -> createNewDocument());
         joinDocButton.addActionListener(e -> joinDocumentWithCode());
 
+        textPane.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (currentUserRole == UserRole.VIEWER && currentDocumentId != null && isEditKey(e)) {
+                    showViewerEditWarning();
+                }
+            }
+
+            @Override
+            public void keyTyped(java.awt.event.KeyEvent e) {
+                if (currentUserRole == UserRole.VIEWER && currentDocumentId != null && !Character.isISOControl(e.getKeyChar())) {
+                    showViewerEditWarning();
+                }
+            }
+        });
+
         textPane.addCaretListener(e -> {
             if (!isRemoteUpdate && isConnected && currentUserRole == UserRole.EDITOR) {
                 int position = e.getDot();
@@ -176,6 +215,8 @@ public class EditorUI extends JFrame {
                     super.insertString(fb, offset, string, attr);
                 } else if (currentUserRole == UserRole.EDITOR) {
                     handleInsert(offset, string);
+                } else if (currentUserRole == UserRole.VIEWER && string != null && !string.isEmpty()) {
+                    showViewerEditWarning();
                 }
             }
 
@@ -186,6 +227,8 @@ public class EditorUI extends JFrame {
                     super.remove(fb, offset, length);
                 } else if (currentUserRole == UserRole.EDITOR) {
                     handleRemove(offset, length);
+                } else if (currentUserRole == UserRole.VIEWER && length > 0) {
+                    showViewerEditWarning();
                 }
             }
 
@@ -196,8 +239,12 @@ public class EditorUI extends JFrame {
                     super.replace(fb, offset, length, text, attrs);
                     return;
                 }
-                if (currentUserRole != UserRole.EDITOR)
+                if (currentUserRole != UserRole.EDITOR) {
+                    if (currentUserRole == UserRole.VIEWER) {
+                        showViewerEditWarning();
+                    }
                     return;
+                }
 
                 if (length == 0 && text != null && !text.isEmpty()) {
                     handleInsert(offset, text);
@@ -223,6 +270,7 @@ public class EditorUI extends JFrame {
             return;
         }
 
+        resetLocalDocumentState();
         String message = MessageHandler.createSessionMessage(localUserId, getUsername());
         wsClient.sendMessage(message);
         setStatus("Creating new document...");
@@ -237,12 +285,63 @@ public class EditorUI extends JFrame {
         String code = documentCodeField.getText().trim();
         if (code.isEmpty()) {
             setStatus("Please enter a share code!");
+            JOptionPane.showMessageDialog(this, "Please enter the code.", "Missing Join Code",
+                    JOptionPane.WARNING_MESSAGE);
             return;
         }
 
+        resetLocalDocumentState();
         String message = MessageHandler.joinSessionMessage(localUserId, getUsername(), code);
         wsClient.sendMessage(message);
         setStatus("Joining document with code: " + code);
+    }
+
+    private boolean isEditKey(java.awt.event.KeyEvent e) {
+        if (e.isControlDown() && (e.getKeyCode() == java.awt.event.KeyEvent.VK_V
+                || e.getKeyCode() == java.awt.event.KeyEvent.VK_X)) {
+            return true;
+        }
+        return e.getKeyCode() == java.awt.event.KeyEvent.VK_BACK_SPACE
+                || e.getKeyCode() == java.awt.event.KeyEvent.VK_DELETE
+                || e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER;
+    }
+
+    private void showViewerEditWarning() {
+        setStatus("Viewers cannot edit this document.");
+        Toolkit.getDefaultToolkit().beep();
+        long now = System.currentTimeMillis();
+        if (now - lastViewerEditWarningAt < 2000) {
+            return;
+        }
+        lastViewerEditWarningAt = now;
+        JOptionPane.showMessageDialog(this, "You cannot type as a viewer.", "Read-only Viewer",
+                JOptionPane.WARNING_MESSAGE);
+    }
+
+    private void resetLocalDocumentState() {
+        isRemoteUpdate = true;
+        document = new Document();
+        localClock = 0;
+        currentDocumentId = null;
+        currentShareCode = null;
+        currentUserRole = UserRole.VIEWER;
+        remoteCursors.clear();
+        remoteCursorHighlightTags.clear();
+        userLabels.clear();
+        editorCodeField.setText("");
+        viewerCodeField.setText("");
+        shareCodesPanel.setVisible(false);
+        roleLabel.setText("Role: none");
+        textPane.setText("");
+        textPane.setEditable(false);
+        usersPanel.removeAll();
+        usersPanel.add(usersTitle);
+        usersPanel.add(Box.createVerticalStrut(8));
+        document.apply(new InsertBlockOperation(blockId, null, localUserId, localClock));
+        localClock++;
+        usersPanel.revalidate();
+        usersPanel.repaint();
+        isRemoteUpdate = false;
     }
 
     private void handleInsert(int offset, String string) {
@@ -258,6 +357,9 @@ public class EditorUI extends JFrame {
     }
 
     private void handleInsertAtOffset(int offset, String text) {
+        if (currentUserRole != UserRole.EDITOR) {
+            return;
+        }
         String parentId = document.getCharIdBeforeOffset(blockId, offset);
         for (int i = 0; i < text.length(); i++) {
             char value = text.charAt(i);
@@ -275,6 +377,9 @@ public class EditorUI extends JFrame {
     }
 
     private void handleDeleteRange(int offset, int length) {
+        if (currentUserRole != UserRole.EDITOR) {
+            return;
+        }
         java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
         java.util.List<String> idsToDelete = new ArrayList<>();
         int end = Math.min(offset + length, visibleIds.size());
@@ -424,6 +529,11 @@ public class EditorUI extends JFrame {
                     setStatus("Disconnected");
                     connectButton.setText("Connect");
                     textPane.setEditable(false);
+                    currentUserRole = UserRole.VIEWER;
+                    roleLabel.setText("Role: none");
+                    editorCodeField.setText("");
+                    viewerCodeField.setText("");
+                    shareCodesPanel.setVisible(false);
                     createDocButton.setEnabled(false);
                     joinDocButton.setEnabled(false);
                     hostField.setEnabled(true);
@@ -455,12 +565,18 @@ public class EditorUI extends JFrame {
         // Handle session creation response
         if (MessageHandler.isSessionCreatedMessage(message)) {
             currentDocumentId = MessageHandler.getDocumentId(message);
-            currentShareCode = MessageHandler.getShareCode(message);
+            String editorCode = MessageHandler.getEditorCode(message);
+            String viewerCode = MessageHandler.getViewerCode(message);
+            currentShareCode = editorCode;
             currentUserRole = UserRole.EDITOR;
             textPane.setEditable(true);
-            setStatus("Document created! Share code: " + currentShareCode);
+            roleLabel.setText("Role: EDITOR");
+            editorCodeField.setText(editorCode != null ? editorCode : "");
+            viewerCodeField.setText(viewerCode != null ? viewerCode : "");
+            shareCodesPanel.setVisible(true);
+            setStatus("Document created! Editor and viewer codes are ready.");
             JOptionPane.showMessageDialog(this,
-                    "Document Created!\n\nShare this code with others:\n" + currentShareCode,
+                    "Document Created!\n\nEditor code:\n" + editorCode + "\n\nViewer code:\n" + viewerCode,
                     "Document Created", JOptionPane.INFORMATION_MESSAGE);
 
             // Send join message for this session
@@ -476,11 +592,26 @@ public class EditorUI extends JFrame {
 
             if (currentUserRole == UserRole.EDITOR) {
                 textPane.setEditable(true);
+                roleLabel.setText("Role: EDITOR");
+                String editorCode = MessageHandler.getEditorCode(message);
+                String viewerCode = MessageHandler.getViewerCode(message);
+                editorCodeField.setText(editorCode != null ? editorCode : "");
+                viewerCodeField.setText(viewerCode != null ? viewerCode : "");
+                shareCodesPanel.setVisible(editorCode != null || viewerCode != null);
                 setStatus("Joined as EDITOR");
             } else {
                 textPane.setEditable(false);
+                roleLabel.setText("Role: VIEWER");
+                editorCodeField.setText("");
+                viewerCodeField.setText("");
+                shareCodesPanel.setVisible(false);
                 setStatus("Joined as VIEWER (read-only)");
             }
+
+            for (String oldOperationMessage : MessageHandler.getOperationHistory(message)) {
+                applyRemoteOperation(oldOperationMessage);
+            }
+            refreshTextFromDocument();
 
             // Send presence join
             wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername(), currentDocumentId));
@@ -492,6 +623,13 @@ public class EditorUI extends JFrame {
             String reason = MessageHandler.getRejectionReason(message);
             setStatus("Join failed: " + reason);
             JOptionPane.showMessageDialog(this, "Failed to join: " + reason, "Join Failed", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (MessageHandler.isPermissionDeniedMessage(message)) {
+            String reason = MessageHandler.getRejectionReason(message);
+            setStatus("Permission denied: " + reason);
+            JOptionPane.showMessageDialog(this, reason, "Permission Denied", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -540,16 +678,27 @@ public class EditorUI extends JFrame {
 
         Object operation = MessageHandler.messageToOperation(message);
         if (operation != null) {
-            if (operation instanceof InsertCharacterOperation) {
-                document.apply((InsertCharacterOperation) operation);
-            } else if (operation instanceof DeleteCharacterOperation) {
-                document.apply((DeleteCharacterOperation) operation);
-            } else if (operation instanceof InsertBlockOperation) {
-                document.apply((InsertBlockOperation) operation);
-            } else if (operation instanceof DeleteBlockOperation) {
-                document.apply((DeleteBlockOperation) operation);
-            }
+            applyRemoteOperation(operation);
             refreshTextFromDocument();
+        }
+    }
+
+    private void applyRemoteOperation(String operationMessage) {
+        Object operation = MessageHandler.messageToOperation(operationMessage);
+        if (operation != null) {
+            applyRemoteOperation(operation);
+        }
+    }
+
+    private void applyRemoteOperation(Object operation) {
+        if (operation instanceof InsertCharacterOperation) {
+            document.apply((InsertCharacterOperation) operation);
+        } else if (operation instanceof DeleteCharacterOperation) {
+            document.apply((DeleteCharacterOperation) operation);
+        } else if (operation instanceof InsertBlockOperation) {
+            document.apply((InsertBlockOperation) operation);
+        } else if (operation instanceof DeleteBlockOperation) {
+            document.apply((DeleteBlockOperation) operation);
         }
     }
 
