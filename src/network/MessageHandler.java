@@ -48,10 +48,21 @@ public class MessageHandler {
     }
 
     public static String joinAcceptedMessage(String documentId, String role, List<String> operationHistory) {
+        return joinAcceptedMessage(documentId, role, null, null, operationHistory);
+    }
+
+    public static String joinAcceptedMessage(String documentId, String role, String editorCode, String viewerCode,
+            List<String> operationHistory) {
         JsonObject json = new JsonObject();
         json.addProperty("type", "JOIN_ACCEPTED");
         json.addProperty("documentId", documentId);
         json.addProperty("role", role);
+        if (editorCode != null) {
+            json.addProperty("editorCode", editorCode);
+        }
+        if (viewerCode != null) {
+            json.addProperty("viewerCode", viewerCode);
+        }
         JsonArray historyArray = new JsonArray();
         if (operationHistory != null) {
             for (String op : operationHistory) {
@@ -65,6 +76,13 @@ public class MessageHandler {
     public static String joinRejectedMessage(String reason) {
         JsonObject json = new JsonObject();
         json.addProperty("type", "JOIN_REJECTED");
+        json.addProperty("reason", reason);
+        return gson.toJson(json);
+    }
+
+    public static String permissionDeniedMessage(String reason) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "PERMISSION_DENIED");
         json.addProperty("reason", reason);
         return gson.toJson(json);
     }
@@ -165,12 +183,24 @@ public class MessageHandler {
     }
 
     public static String getShareCode(String message) {
+        return getEditorCode(message);
+    }
+
+    public static String getEditorCode(String message) {
         try {
             JsonObject json = JsonParser.parseString(message).getAsJsonObject();
-            if (json.has("editorCode")) {
+            if (json.has("editorCode") && !json.get("editorCode").isJsonNull()) {
                 return json.get("editorCode").getAsString();
             }
-            if (json.has("viewerCode")) {
+        } catch (Exception e) {
+        }
+        return null;
+    }
+
+    public static String getViewerCode(String message) {
+        try {
+            JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+            if (json.has("viewerCode") && !json.get("viewerCode").isJsonNull()) {
                 return json.get("viewerCode").getAsString();
             }
         } catch (Exception e) {
@@ -274,6 +304,10 @@ public class MessageHandler {
 
     public static boolean isJoinRejectedMessage(String message) {
         return isMessageType(message, "JOIN_REJECTED");
+    }
+
+    public static boolean isPermissionDeniedMessage(String message) {
+        return isMessageType(message, "PERMISSION_DENIED");
     }
 
     public static boolean isCursorMessage(String message) {
