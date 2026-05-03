@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Map;
@@ -33,12 +34,12 @@ public class WebSocketServer {
 
     public WebSocketServer(int port) {
         try {
-            serverSocket = new ServerSocket(port);
+            serverSocket = new ServerSocket(port, 50, InetAddress.getByName("0.0.0.0"));
             running = true;
             storage = new MongoSessionStorage(); // CHANGED: Now using MongoDB
             loadExistingSessions();
             addShutdownHook(); // ADDED: Save on shutdown
-            System.out.println("Server started on port " + port);
+            System.out.println("Server started on port " + port + " (listening on all interfaces)");
         } catch (IOException e) {
             System.out.println("Failed to start server: " + e.getMessage());
             throw new RuntimeException(e);

@@ -606,6 +606,8 @@ public class EditorUI extends JFrame {
 
         hostField.setEnabled(false);
         portField.setEnabled(false);
+        connectButton.setEnabled(false);
+        setStatus("Connecting to " + host + ":" + port + "...");
 
         wsClient = new WebSocketClient(host, port, new WebSocketClient.MessageListener() {
             @Override
@@ -619,6 +621,7 @@ public class EditorUI extends JFrame {
                     isConnected = true;
                     setStatus("Connected to " + host + ":" + port);
                     connectButton.setText("Disconnect");
+                    connectButton.setEnabled(true);
                     createDocButton.setEnabled(true);
                     joinDocButton.setEnabled(true);
                     updateImportExportButtons();
@@ -633,6 +636,7 @@ public class EditorUI extends JFrame {
                     isConnected = false;
                     setStatus("Disconnected");
                     connectButton.setText("Connect");
+                    connectButton.setEnabled(true);
                     textPane.setEditable(false);
                     currentUserRole = UserRole.VIEWER;
                     roleLabel.setText("Role: none");
@@ -653,7 +657,9 @@ public class EditorUI extends JFrame {
                 });
             }
         });
-        wsClient.connect();
+        Thread connectThread = new Thread(wsClient::connect, "collab-connect");
+        connectThread.setDaemon(true);
+        connectThread.start();
     }
 
     private void disconnectFromServer() {

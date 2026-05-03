@@ -10,13 +10,23 @@ public class ClientLauncher {
     private static final String DOCUMENT_ID = "block-1";
 
     public static void main(String[] args) {
+        String host = args.length > 0 ? args[0] : "localhost";
+        int port = 9091;
+        if (args.length > 1) {
+            try {
+                port = Integer.parseInt(args[1]);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid port '" + args[1] + "', using 9091.");
+            }
+        }
+
         Document doc = new Document();
 
         // Create an array to hold the client reference (workaround for "might not be
         // initialized")
         final WebSocketClient[] clientHolder = new WebSocketClient[1];
 
-        WebSocketClient client = new WebSocketClient("localhost", 9091, new WebSocketClient.MessageListener() {
+        WebSocketClient client = new WebSocketClient(host, port, new WebSocketClient.MessageListener() {
             @Override
             public void onMessageReceived(String message) {
                 Object op = MessageHandler.messageToOperation(message);
@@ -45,6 +55,7 @@ public class ClientLauncher {
         // Store the client in the array BEFORE calling connect
         clientHolder[0] = client;
 
+        System.out.println("Connecting to " + host + ":" + port + "...");
         client.connect();
 
         // Keep program running
