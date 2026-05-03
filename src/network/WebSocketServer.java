@@ -2,7 +2,7 @@ package network;
 
 import server.CollaborationSession;
 import model.UserRole;
-import persistence.SessionStorage;
+import persistence.MongoSessionStorage;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -27,15 +27,17 @@ public class WebSocketServer {
     // Keep track of all connected sockets (for cleanup)
     private final List<ClientHandler> allClients = new CopyOnWriteArrayList<>();
 
-    // Task 4: Persistence storage
-    private final SessionStorage storage;
+    // Task 4: MongoDB Persistence storage (CHANGED FROM SessionStorage TO
+    // MongoSessionStorage)
+    private final MongoSessionStorage storage;
 
     public WebSocketServer(int port) {
         try {
             serverSocket = new ServerSocket(port);
             running = true;
-            storage = new SessionStorage();
-            loadExistingSessions(); // Task 4: Load saved sessions on startup
+            storage = new MongoSessionStorage(); // CHANGED: Now using MongoDB
+            loadExistingSessions();
+            addShutdownHook(); // ADDED: Save on shutdown
             System.out.println("Server started on port " + port);
         } catch (IOException e) {
             System.out.println("Failed to start server: " + e.getMessage());
@@ -43,10 +45,21 @@ public class WebSocketServer {
         }
     }
 
-    // Task 4: Load saved sessions from disk
+    // ADDED: Save sessions when server shuts down
+    private void addShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Saving all sessions before shutdown...");
+            for (CollaborationSession session : sessions.values()) {
+                storage.saveSession(session);
+            }
+            storage.close();
+        }));
+    }
+
+    // Task 4: Load saved sessions from MongoDB (CHANGED to use MongoSessionStorage)
     private void loadExistingSessions() {
-        List<SessionStorage.SessionData> savedSessions = storage.loadAllSessions();
-        for (SessionStorage.SessionData data : savedSessions) {
+        List<MongoSessionStorage.SessionData> savedSessions = storage.loadAllSessions();
+        for (MongoSessionStorage.SessionData data : savedSessions) {
             CollaborationSession session = new CollaborationSession(
                     data.getDocumentId(),
                     data.getEditorCode(),
@@ -90,7 +103,7 @@ public class WebSocketServer {
         CollaborationSession session = new CollaborationSession(documentId, editorCode, viewerCode);
         sessions.put(documentId, session);
 
-        // Task 4: Save the newly created session
+        // Task 4: Save the newly created session to MongoDB
         storage.saveSession(session);
 
         System.out.println("Created new session: " + documentId);
@@ -113,7 +126,8 @@ public class WebSocketServer {
                 return session.getDocumentId();
             }
         }
-        return null; // Invalid code
+        // CHANGED: Also check MongoDB if not found in memory
+        return storage.findDocumentIdByCode(code);
     }
 
     /**
@@ -177,23 +191,17 @@ public class WebSocketServer {
             sender.currentSession = session;
             sender.currentDocumentId = documentId;
             sender.userRole = role;
-            session.addClient(sender);
+            session.addClient(sender); // REMOVED duplicate addClient
 
-            // Add client to session
-            session.addClient(sender);
-
-            // Send join acceptance with operation history
+            // Send join acceptance with operation history (CHANGED signature)
             String response = MessageHandler.joinAcceptedMessage(
                     documentId,
                     role.toString(),
-                    role == UserRole.EDITOR ? session.getEditorCode() : null,
-                    role == UserRole.EDITOR ? session.getViewerCode() : null,
                     session.getOperationHistory());
             sender.sendMessage(response);
 
             // Task 3: Replay all past operations to the new joiner
             session.replayHistoryTo(sender);
-
 
             System.out.println("User " + username + " joined document " + documentId + " as " + role);
             return;
@@ -225,7 +233,7 @@ public class WebSocketServer {
                 return;
             }
             session.saveOperation(message);
-            // Task 4: Auto-save after each operation (you might want to batch this)
+            // Task 4: Auto-save to MongoDB after each operation
             storage.saveSession(session);
         }
 
@@ -286,10 +294,10 @@ public class WebSocketServer {
         if (client.currentSession != null) {
             client.currentSession.removeClient(client);
 
-            // Task 4: Save session when last client leaves
+            // Task 4: Save session to MongoDB when last client leaves
             if (client.currentSession.isEmpty()) {
                 storage.saveSession(client.currentSession);
-                System.out.println("Session " + client.currentDocumentId + " is empty, saved to disk");
+                System.out.println("Session " + client.currentDocumentId + " is empty, saved to MongoDB");
             }
         }
         System.out.println("Client removed. Total sockets: " + allClients.size());
@@ -298,11 +306,12 @@ public class WebSocketServer {
     public void stop() {
         running = false;
 
-        // Task 4: Save all sessions before shutdown
+        // Task 4: Save all sessions to MongoDB before shutdown
         System.out.println("Saving all sessions before shutdown...");
         for (CollaborationSession session : sessions.values()) {
             storage.saveSession(session);
         }
+        storage.close();
 
         try {
             serverSocket.close();
