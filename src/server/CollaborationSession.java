@@ -1,14 +1,11 @@
 package server;
 
-import network.ClientHandler;
+import network.WebSocketServer.ClientHandler;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * CollaborationSession - Manages a single document session
- * 
- * Before Phase 3: Server had ONE room and broadcast to everyone
- * After Phase 3: Each document has its own session
  * 
  * A session stores:
  * - Document ID (unique identifier)
@@ -77,7 +74,7 @@ public class CollaborationSession {
         return clients.isEmpty();
     }
 
-    // ========== Operation History ==========
+    // ========== Operation History (TASK 3 IMPLEMENTED) ==========
 
     /**
      * Save a message into the history.
@@ -86,7 +83,8 @@ public class CollaborationSession {
      */
     public void saveOperation(String message) {
         operationHistory.add(message);
-        System.out.println("[Session " + documentId + "] Saved operation. Total history: " + operationHistory.size());
+        System.out.println("[Session " + documentId + "] Saved operation. Total history: " +
+                operationHistory.size());
     }
 
     /**
@@ -94,11 +92,17 @@ public class CollaborationSession {
      * This way they start with the complete document, not empty
      */
     public void replayHistoryTo(ClientHandler client) {
-        System.out.println("[Session " + documentId + "] Replaying "
-                + operationHistory.size() + " operations to new client.");
+        System.out.println("[Session " + documentId + "] Replaying " +
+                operationHistory.size() + " operations to new client.");
         for (String op : operationHistory) {
             client.sendMessage(op);
+            try {
+                Thread.sleep(10); // Small delay to prevent overwhelming the client
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
+        System.out.println("[Session " + documentId + "] Finished replaying history");
     }
 
     // ========== Broadcast ==========

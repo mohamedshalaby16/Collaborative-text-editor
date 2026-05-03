@@ -34,6 +34,7 @@ public class MessageHandler {
         json.addProperty("documentId", documentId);
         json.addProperty("editorCode", editorCode);
         json.addProperty("viewerCode", viewerCode);
+        json.addProperty("role", "EDITOR");
         return gson.toJson(json);
     }
 
@@ -69,12 +70,12 @@ public class MessageHandler {
     }
 
     // ============================================================
-    // Operation Messages with documentId
+    // Operation Messages with documentId (FIXED)
     // ============================================================
 
     public static String operationToMessage(Object operation, String documentId) {
         JsonObject json = new JsonObject();
-        json.addProperty("documentId", documentId);
+        json.addProperty("documentId", documentId); // ✅ CRITICAL FIX: Add documentId to all operations
 
         if (operation instanceof InsertCharacterOperation) {
             InsertCharacterOperation op = (InsertCharacterOperation) operation;
@@ -233,8 +234,9 @@ public class MessageHandler {
                 case "DELETE_CHAR": {
                     int userId = json.get("userId").getAsInt();
                     int clock = json.get("clock").getAsInt();
+                    String charId = json.get("charId").getAsString();
                     String blockId = json.get("blockId").getAsString();
-                    return new DeleteCharacterOperation(userId, clock, blockId);
+                    return new DeleteCharacterOperation(userId, clock, charId, blockId);
                 }
                 case "INSERT_BLOCK": {
                     int userId = json.get("userId").getAsInt();

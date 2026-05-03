@@ -2,6 +2,7 @@ package network;
 
 import server.CollaborationSession;
 import model.UserRole;
+import persistence.SessionStorage;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,13 +27,37 @@ public class WebSocketServer {
     // Keep track of all connected sockets (for cleanup)
     private final List<ClientHandler> allClients = new CopyOnWriteArrayList<>();
 
+    // Task 4: Persistence storage
+    private final SessionStorage storage;
+
     public WebSocketServer(int port) {
         try {
             serverSocket = new ServerSocket(port);
             running = true;
+            storage = new SessionStorage();
+            loadExistingSessions(); // Task 4: Load saved sessions on startup
             System.out.println("Server started on port " + port);
         } catch (IOException e) {
             System.out.println("Failed to start server: " + e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Task 4: Load saved sessions from disk
+    private void loadExistingSessions() {
+        List<SessionStorage.SessionData> savedSessions = storage.loadAllSessions();
+        for (SessionStorage.SessionData data : savedSessions) {
+            CollaborationSession session = new CollaborationSession(
+                    data.getDocumentId(),
+                    data.getEditorCode(),
+                    data.getViewerCode());
+            // Load operation history into the session
+            for (String op : data.getOperationHistory()) {
+                session.saveOperation(op);
+            }
+            sessions.put(data.getDocumentId(), session);
+            System.out.println("Loaded session: " + data.getDocumentId() +
+                    " with " + data.getOperationHistory().size() + " operations");
         }
     }
 
@@ -64,6 +89,10 @@ public class WebSocketServer {
 
         CollaborationSession session = new CollaborationSession(documentId, editorCode, viewerCode);
         sessions.put(documentId, session);
+
+        // Task 4: Save the newly created session
+        storage.saveSession(session);
+
         System.out.println("Created new session: " + documentId);
         return session;
     }
@@ -148,6 +177,9 @@ public class WebSocketServer {
             sender.currentDocumentId = documentId;
             sender.userRole = role;
 
+            // Add client to session
+            session.addClient(sender);
+
             // Send join acceptance with operation history
             String response = MessageHandler.joinAcceptedMessage(
                     documentId,
@@ -155,7 +187,7 @@ public class WebSocketServer {
                     session.getOperationHistory());
             sender.sendMessage(response);
 
-            // Replay all past operations to the new joiner
+            // Task 3: Replay all past operations to the new joiner
             session.replayHistoryTo(sender);
 
             System.out.println("User " + username + " joined document " + documentId + " as " + role);
@@ -175,7 +207,7 @@ public class WebSocketServer {
             return;
         }
 
-        // Save edit operations to history (for late joiners)
+        // Save edit operations to history (for late joiners) - TASK 3
         boolean isEdit = messageType != null && (messageType.equals("INSERT_CHAR") ||
                 messageType.equals("DELETE_CHAR") ||
                 messageType.equals("INSERT_BLOCK") ||
@@ -183,6 +215,8 @@ public class WebSocketServer {
 
         if (isEdit) {
             session.saveOperation(message);
+            // Task 4: Auto-save after each operation (you might want to batch this)
+            storage.saveSession(session);
         }
 
         // Broadcast to everyone else in the SAME session only
@@ -241,12 +275,25 @@ public class WebSocketServer {
         // Remove from whichever session this client belongs to
         if (client.currentSession != null) {
             client.currentSession.removeClient(client);
+
+            // Task 4: Save session when last client leaves
+            if (client.currentSession.isEmpty()) {
+                storage.saveSession(client.currentSession);
+                System.out.println("Session " + client.currentDocumentId + " is empty, saved to disk");
+            }
         }
         System.out.println("Client removed. Total sockets: " + allClients.size());
     }
 
     public void stop() {
         running = false;
+
+        // Task 4: Save all sessions before shutdown
+        System.out.println("Saving all sessions before shutdown...");
+        for (CollaborationSession session : sessions.values()) {
+            storage.saveSession(session);
+        }
+
         try {
             serverSocket.close();
         } catch (IOException e) {
