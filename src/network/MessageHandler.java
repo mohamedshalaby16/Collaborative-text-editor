@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonArray;
 
+import model.SessionInfo;
 import operations.InsertCharacterOperation;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
@@ -85,6 +86,85 @@ public class MessageHandler {
         json.addProperty("type", "PERMISSION_DENIED");
         json.addProperty("reason", reason);
         return gson.toJson(json);
+    }
+
+    public static String listSessionsMessage() {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "LIST_SESSIONS");
+        return gson.toJson(json);
+    }
+
+    public static String sessionsListMessage(List<SessionInfo> sessions) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "SESSIONS_LIST");
+        JsonArray sessionsJson = new JsonArray();
+        for (SessionInfo session : sessions) {
+            JsonObject sessionJson = new JsonObject();
+            sessionJson.addProperty("documentId", session.getDocumentId());
+            sessionJson.addProperty("editorCode", session.getEditorCode());
+            sessionJson.addProperty("viewerCode", session.getViewerCode());
+            sessionsJson.add(sessionJson);
+        }
+        json.add("sessions", sessionsJson);
+        return gson.toJson(json);
+    }
+
+    public static String deleteSessionMessage(String documentId) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "DELETE_SESSION");
+        json.addProperty("documentId", documentId);
+        return gson.toJson(json);
+    }
+
+    public static String deleteSessionResponseMessage(boolean success, String documentId, String reason) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "DELETE_SESSION_RESPONSE");
+        json.addProperty("success", success);
+        json.addProperty("documentId", documentId);
+        if (reason != null) {
+            json.addProperty("reason", reason);
+        }
+        return gson.toJson(json);
+    }
+
+    public static boolean isSessionsListMessage(String message) {
+        return isMessageType(message, "SESSIONS_LIST");
+    }
+
+    public static boolean isDeleteSessionResponseMessage(String message) {
+        return isMessageType(message, "DELETE_SESSION_RESPONSE");
+    }
+
+    public static List<SessionInfo> getSessionInfoList(String message) {
+        List<SessionInfo> sessions = new java.util.ArrayList<>();
+        try {
+            JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+            if (json.has("sessions")) {
+                JsonArray arr = json.getAsJsonArray("sessions");
+                for (int i = 0; i < arr.size(); i++) {
+                    JsonObject sessionJson = arr.get(i).getAsJsonObject();
+                    String documentId = sessionJson.has("documentId") ? sessionJson.get("documentId").getAsString() : null;
+                    String editorCode = sessionJson.has("editorCode") ? sessionJson.get("editorCode").getAsString() : null;
+                    String viewerCode = sessionJson.has("viewerCode") ? sessionJson.get("viewerCode").getAsString() : null;
+                    sessions.add(new SessionInfo(documentId, editorCode, viewerCode));
+                }
+            }
+        } catch (Exception e) {
+        }
+        return sessions;
+    }
+
+    public static boolean getDeleteSessionSuccess(String message) {
+        try {
+            JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+            return json.has("success") && json.get("success").getAsBoolean();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static String getDeleteSessionReason(String message) {
+        return getStringField(message, "reason");
     }
 
     // ============================================================

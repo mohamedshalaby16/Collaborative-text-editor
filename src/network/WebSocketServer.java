@@ -199,6 +199,53 @@ public class WebSocketServer {
             return;
         }
 
+        // Handle LIST_SESSIONS request
+        if ("LIST_SESSIONS".equals(messageType)) {
+            java.util.List<model.SessionInfo> sessionInfoList = new java.util.ArrayList<>();
+            for (CollaborationSession activeSession : sessions.values()) {
+                sessionInfoList.add(new model.SessionInfo(
+                        activeSession.getDocumentId(),
+                        activeSession.getEditorCode(),
+                        activeSession.getViewerCode()));
+            }
+            sender.sendMessage(MessageHandler.sessionsListMessage(sessionInfoList));
+            return;
+        }
+
+        // Handle DELETE_SESSION request
+        if ("DELETE_SESSION".equals(messageType)) {
+            String documentIdToDelete = MessageHandler.getDocumentId(message);
+            if (documentIdToDelete == null) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, null,
+                        "Missing documentId"));
+                return;
+            }
+
+            CollaborationSession targetSession = sessions.get(documentIdToDelete);
+            if (targetSession == null) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, documentIdToDelete,
+                        "Session not found"));
+                return;
+            }
+
+            if (!targetSession.isEmpty()) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, documentIdToDelete,
+                        "Cannot delete active session"));
+                return;
+            }
+
+            sessions.remove(documentIdToDelete);
+            boolean deleted = storage.deleteSession(documentIdToDelete);
+            if (deleted) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(true, documentIdToDelete, null));
+                System.out.println("Deleted session " + documentIdToDelete + " from storage and memory.");
+            } else {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, documentIdToDelete,
+                        "Failed to delete session file"));
+            }
+            return;
+        }
+
         // Handle regular messages (edits, cursor, leave)
         String documentId = MessageHandler.getDocumentId(message);
         if (documentId == null) {

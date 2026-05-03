@@ -1,0 +1,9 @@
+{
+  "documentId": "doc_1777828380236_ba41",
+  "editorCode": "E-8C672931",
+  "viewerCode": "V-50564003",
+  "operationHistory": [
+    "{\"documentId\":\"doc_1777828380236_ba41\",\"type\":\"INSERT_CHAR\",\"userId\":78763,\"clock\":1,\"value\":\"a\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"doc_1777828380236_ba41\",\"type\":\"INSERT_CHAR\",\"userId\":78763,\"clock\":2,\"value\":\"a\",\"parentId\":\"78763-1\",\"blockId\":\"block-1\"}"
+  ]
+}

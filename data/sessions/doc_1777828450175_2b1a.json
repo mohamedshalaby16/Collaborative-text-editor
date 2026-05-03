@@ -1,0 +1,11 @@
+{
+  "documentId": "doc_1777828450175_2b1a",
+  "editorCode": "E-9B43966A",
+  "viewerCode": "V-2C9893A6",
+  "operationHistory": [
+    "{\"documentId\":\"doc_1777828450175_2b1a\",\"type\":\"INSERT_CHAR\",\"userId\":5209,\"clock\":1,\"value\":\"a\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"doc_1777828450175_2b1a\",\"type\":\"INSERT_CHAR\",\"userId\":5209,\"clock\":2,\"value\":\"a\",\"parentId\":\"5209-1\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"doc_1777828450175_2b1a\",\"type\":\"INSERT_CHAR\",\"userId\":5209,\"clock\":3,\"value\":\"a\",\"parentId\":\"5209-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"doc_1777828450175_2b1a\",\"type\":\"INSERT_CHAR\",\"userId\":5209,\"clock\":4,\"value\":\"a\",\"parentId\":\"5209-3\",\"blockId\":\"block-1\"}"
+  ]
+}

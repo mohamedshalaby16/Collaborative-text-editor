@@ -42,6 +42,12 @@ public class EditorUI extends JFrame {
     private JButton importButton;
     private JLabel statusLabel;
 
+    private DefaultListModel<model.SessionInfo> sessionListModel;
+    private JList<model.SessionInfo> sessionList;
+    private JButton refreshListButton;
+    private JButton deleteDocButton;
+    private JPanel sessionListPanel;
+
     private JPanel usersPanel;
     private JLabel usersTitle;
     private Map<Integer, JLabel> userLabels;
@@ -121,18 +127,38 @@ public class EditorUI extends JFrame {
         shareCodesPanel.add(editorCodeField);
         shareCodesPanel.add(new JLabel("Viewer Code:"));
         shareCodesPanel.add(viewerCodeField);
-        shareCodesPanel.setVisible(false);
+        shareCodesPanel.setVisible(true);
 
         connectButton = new JButton("Connect");
         statusLabel = new JLabel("Not connected");
 
+        sessionListModel = new DefaultListModel<>();
+        sessionList = new JList<>(sessionListModel);
+        sessionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        sessionList.setVisibleRowCount(6);
+
+        refreshListButton = new JButton("Refresh Docs");
+        refreshListButton.setEnabled(false);
+        deleteDocButton = new JButton("Delete Doc");
+        deleteDocButton.setEnabled(false);
+
+        sessionListPanel = new JPanel(new BorderLayout());
+        sessionListPanel.setBorder(BorderFactory.createTitledBorder("Saved Documents"));
+        sessionListPanel.add(new JScrollPane(sessionList), BorderLayout.CENTER);
+        JPanel sessionButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        sessionButtons.add(refreshListButton);
+        sessionButtons.add(deleteDocButton);
+        sessionListPanel.add(sessionButtons, BorderLayout.SOUTH);
+
         usersPanel = new JPanel();
         usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.Y_AXIS));
         usersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        usersPanel.setPreferredSize(new Dimension(150, 0));
+        usersPanel.setPreferredSize(new Dimension(280, 0));
 
         usersTitle = new JLabel("Active Users");
         usersTitle.setFont(usersTitle.getFont().deriveFont(Font.BOLD));
+        usersPanel.add(sessionListPanel);
+        usersPanel.add(Box.createVerticalStrut(12));
         usersPanel.add(usersTitle);
         usersPanel.add(Box.createVerticalStrut(8));
 
@@ -165,10 +191,15 @@ public class EditorUI extends JFrame {
         documentRow.add(importButton);
         documentRow.add(exportButton);
         documentRow.add(roleLabel);
-        documentRow.add(shareCodesPanel);
+
+        // Share codes row - always visible
+        JPanel codesRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        codesRow.setBorder(BorderFactory.createTitledBorder("Share Codes"));
+        codesRow.add(shareCodesPanel);
 
         topPanel.add(connectionRow);
         topPanel.add(documentRow);
+        topPanel.add(codesRow);
 
         JScrollPane scrollPane = new JScrollPane(textPane);
 
@@ -187,10 +218,17 @@ public class EditorUI extends JFrame {
             }
         });
 
-        createDocButton.addActionListener(e -> createNewDocument());
+        createDocButton.addActionListener(e -> {
+            createNewDocument();
+        
+        });
         joinDocButton.addActionListener(e -> joinDocumentWithCode());
+        refreshListButton.addActionListener(e -> requestSessionList());
+        deleteDocButton.addActionListener(e -> deleteSelectedSession());
         importButton.addActionListener(e -> importTextFile());
         exportButton.addActionListener(e -> exportCurrentDocumentText());
+
+        sessionList.addListSelectionListener(e -> updateSessionListButtons());
 
         textPane.addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
@@ -342,11 +380,12 @@ public class EditorUI extends JFrame {
         userLabels.clear();
         editorCodeField.setText("");
         viewerCodeField.setText("");
-        shareCodesPanel.setVisible(false);
+        shareCodesPanel.setVisible(true);
         roleLabel.setText("Role: none");
-        textPane.setText("");
         textPane.setEditable(false);
         usersPanel.removeAll();
+        usersPanel.add(sessionListPanel);
+        usersPanel.add(Box.createVerticalStrut(12));
         usersPanel.add(usersTitle);
         usersPanel.add(Box.createVerticalStrut(8));
         document.apply(new InsertBlockOperation(blockId, null, localUserId, localClock));
@@ -532,6 +571,8 @@ public class EditorUI extends JFrame {
                     createDocButton.setEnabled(true);
                     joinDocButton.setEnabled(true);
                     updateImportExportButtons();
+                    updateSessionListButtons();
+                    requestSessionList();
                 });
             }
 
@@ -546,13 +587,14 @@ public class EditorUI extends JFrame {
                     roleLabel.setText("Role: none");
                     editorCodeField.setText("");
                     viewerCodeField.setText("");
-                    shareCodesPanel.setVisible(false);
+                    shareCodesPanel.setVisible(true);
                     createDocButton.setEnabled(false);
                     joinDocButton.setEnabled(false);
                     hostField.setEnabled(true);
                     portField.setEnabled(true);
                     remoteCursors.clear();
                     updateImportExportButtons();
+                    updateSessionListButtons();
                     for (int uid : new ArrayList<>(userLabels.keySet())) {
                         removeUserFromPanel(uid);
                     }
@@ -573,6 +615,37 @@ public class EditorUI extends JFrame {
         if (wsClient != null && wsClient.isConnected() && currentDocumentId != null) {
             wsClient.sendMessage(MessageHandler.leaveToMessage(localUserId, currentDocumentId));
         }
+    }
+
+    private void requestSessionList() {
+        if (wsClient != null && wsClient.isConnected()) {
+            wsClient.sendMessage(MessageHandler.listSessionsMessage());
+        }
+    }
+
+    private void deleteSelectedSession() {
+        model.SessionInfo selected = sessionList.getSelectedValue();
+        if (selected == null) {
+            return;
+        }
+
+        if (!isConnected) {
+            JOptionPane.showMessageDialog(this, "You must be connected to the server to delete documents.",
+                    "Not Connected", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int result = JOptionPane.showConfirmDialog(this,
+                "Delete document " + selected.getDocumentId() + "?\nThis cannot be undone.",
+                "Delete Document", JOptionPane.YES_NO_OPTION);
+        if (result == JOptionPane.YES_OPTION && wsClient != null && wsClient.isConnected()) {
+            wsClient.sendMessage(MessageHandler.deleteSessionMessage(selected.getDocumentId()));
+        }
+    }
+
+    private void updateSessionListButtons() {
+        refreshListButton.setEnabled(isConnected);
+        deleteDocButton.setEnabled(isConnected &&sessionList.getSelectedIndex() >= 0);
     }
 
     private void exportCurrentDocumentText() {
@@ -648,6 +721,7 @@ public class EditorUI extends JFrame {
             // Send join message for this session
             wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername(), currentDocumentId));
             updateImportExportButtons();
+            requestSessionList();
             return;
         }
 
@@ -664,14 +738,14 @@ public class EditorUI extends JFrame {
                 String viewerCode = MessageHandler.getViewerCode(message);
                 editorCodeField.setText(editorCode != null ? editorCode : "");
                 viewerCodeField.setText(viewerCode != null ? viewerCode : "");
-                shareCodesPanel.setVisible(editorCode != null || viewerCode != null);
+                shareCodesPanel.setVisible(true);
                 setStatus("Joined as EDITOR");
             } else {
                 textPane.setEditable(false);
                 roleLabel.setText("Role: VIEWER");
                 editorCodeField.setText("");
                 viewerCodeField.setText("");
-                shareCodesPanel.setVisible(false);
+                shareCodesPanel.setVisible(true);
                 setStatus("Joined as VIEWER (read-only)");
             }
 
@@ -698,6 +772,29 @@ public class EditorUI extends JFrame {
             String reason = MessageHandler.getRejectionReason(message);
             setStatus("Permission denied: " + reason);
             JOptionPane.showMessageDialog(this, reason, "Permission Denied", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        if (MessageHandler.isSessionsListMessage(message)) {
+            java.util.List<model.SessionInfo> sessions = MessageHandler.getSessionInfoList(message);
+            sessionListModel.clear();
+            for (model.SessionInfo session : sessions) {
+                sessionListModel.addElement(session);
+            }
+            setStatus("Loaded " + sessions.size() + " saved documents.");
+            updateSessionListButtons();
+            return;
+        }
+
+        if (MessageHandler.isDeleteSessionResponseMessage(message)) {
+            boolean success = MessageHandler.getDeleteSessionSuccess(message);
+            String reason = MessageHandler.getDeleteSessionReason(message);
+            if (success) {
+                setStatus("Document deleted successfully.");
+                requestSessionList();
+            } else {
+                setStatus("Failed to delete document: " + (reason != null ? reason : "unknown"));
+            }
             return;
         }
 
