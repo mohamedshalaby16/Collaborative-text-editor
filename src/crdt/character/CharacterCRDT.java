@@ -1,10 +1,9 @@
 package crdt.character;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
-
 import util.IdGenerator;
 import util.OrderingUtil;
 
@@ -105,4 +104,10 @@ public class CharacterCRDT {
     private void sortNodes(List<CRDTNode> nodes) {
         nodes.sort((a, b) -> OrderingUtil.compare(a.clock, a.userId, b.clock, b.userId));
     }
+    public void undelete(String id) {
+    CRDTNode node = nodeMap.get(id);
+    if (node != null) {
+        node.del = false;
+    }
+}
 }

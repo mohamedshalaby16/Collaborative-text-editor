@@ -21,11 +21,12 @@ public class MessageHandler {
     // Session Management Messages
     // ============================================================
 
-    public static String createSessionMessage(int userId, String username) {
+    public static String createSessionMessage(int userId, String username, String docName) {
         JsonObject json = new JsonObject();
         json.addProperty("type", "CREATE_SESSION");
         json.addProperty("userId", userId);
         json.addProperty("username", username);
+         json.addProperty("docName", docName);
         return gson.toJson(json);
     }
 

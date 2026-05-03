@@ -9,6 +9,7 @@ import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
 import operations.InsertCharacterOperation;
 
+
 public class Document {
 
     private BlockCRDT blockCRDT; // manages the ordering of blocks
@@ -110,5 +111,12 @@ public class Document {
 
         return visibleIds.get(offset);
     }
+ 
 
+    public Block getBlock(String blockId) {
+    return blockCRDT.getBlock(blockId);
 }
+}
+
+
+

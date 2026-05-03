@@ -82,8 +82,9 @@ public class WebSocketServer {
         return UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
-    public CollaborationSession createSession(String creatorUsername) {
-        String documentId = "doc_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 4);
+    public CollaborationSession createSession(String creatorUsername, String docName) {
+        String safeDocName = docName.replaceAll("[^a-zA-Z0-9_\\-]", "_");
+    String documentId = safeDocName + "_" + System.currentTimeMillis();
         String editorCode = "E-" + generateShareCode();
         String viewerCode = "V-" + generateShareCode();
 
@@ -144,7 +145,8 @@ public class WebSocketServer {
         if ("CREATE_SESSION".equals(messageType)) {
             int userId = getUserIdFromMessage(message);
             String username = getUsernameFromMessage(message);
-            CollaborationSession session = createSession(username);
+            String docName = getDocNameFromMessage(message);    
+            CollaborationSession session = createSession(username, docName);
 
             String response = MessageHandler.sessionCreatedMessage(
                     session.getDocumentId(),
@@ -315,6 +317,15 @@ public class WebSocketServer {
         }
         return "unknown";
     }
+    private String getDocNameFromMessage(String message) {
+    try {
+        com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(message).getAsJsonObject();
+        if (json.has("docName")) {
+            return json.get("docName").getAsString();
+        }
+    } catch (Exception e) {}
+    return "doc";
+}
 
     private String getJoinCodeFromMessage(String message) {
         try {

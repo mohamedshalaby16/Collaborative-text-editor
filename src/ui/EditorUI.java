@@ -1,5 +1,6 @@
 package ui;
 
+import crdt.block.Block;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,6 +23,11 @@ public class EditorUI extends JFrame {
     // Connection configuration fields
     private JTextField hostField;
     private JTextField portField;
+    // Add these with the other fields at the top
+    private final java.util.Deque<java.util.List<Object>> undoStack = new java.util.ArrayDeque<>();
+    private final java.util.Deque<java.util.List<Object>> redoStack = new java.util.ArrayDeque<>();
+    private JButton undoButton;
+    private JButton redoButton;
 
     // Document management fields
     private JTextField documentCodeField;
@@ -161,7 +167,10 @@ public class EditorUI extends JFrame {
         usersPanel.add(Box.createVerticalStrut(12));
         usersPanel.add(usersTitle);
         usersPanel.add(Box.createVerticalStrut(8));
-
+        undoButton = new JButton("Undo");
+        undoButton.setEnabled(false);
+        redoButton = new JButton("Redo");
+        redoButton.setEnabled(false);
         // Initially disable join buttons until connected
         createDocButton.setEnabled(false);
         joinDocButton.setEnabled(false);
@@ -191,6 +200,8 @@ public class EditorUI extends JFrame {
         documentRow.add(importButton);
         documentRow.add(exportButton);
         documentRow.add(roleLabel);
+        documentRow.add(undoButton);
+        documentRow.add(redoButton);
 
         // Share codes row - always visible
         JPanel codesRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -227,6 +238,8 @@ public class EditorUI extends JFrame {
         deleteDocButton.addActionListener(e -> deleteSelectedSession());
         importButton.addActionListener(e -> importTextFile());
         exportButton.addActionListener(e -> exportCurrentDocumentText());
+        undoButton.addActionListener(e -> performUndo());
+        redoButton.addActionListener(e -> performRedo());
 
         sessionList.addListSelectionListener(e -> updateSessionListButtons());
 
@@ -314,17 +327,24 @@ public class EditorUI extends JFrame {
         });
     }
 
-    private void createNewDocument() {
-        if (!isConnected || wsClient == null) {
-            setStatus("Not connected to server!");
-            return;
-        }
-
-        resetLocalDocumentState();
-        String message = MessageHandler.createSessionMessage(localUserId, getUsername());
-        wsClient.sendMessage(message);
-        setStatus("Creating new document...");
+   private void createNewDocument() {
+    if (!isConnected || wsClient == null) {
+        setStatus("Not connected to server!");
+        return;
     }
+
+    String docName = JOptionPane.showInputDialog(this, "Enter document name:", "New Document", JOptionPane.PLAIN_MESSAGE);
+    if (docName == null) return; // user cancelled
+    if (docName.trim().isEmpty()) {
+        JOptionPane.showMessageDialog(this, "Document name cannot be empty.", "Invalid Name", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    resetLocalDocumentState();
+    String message = MessageHandler.createSessionMessage(localUserId, getUsername(), docName.trim());
+    wsClient.sendMessage(message);
+    setStatus("Creating document: " + docName.trim());
+}
 
     private void joinDocumentWithCode() {
         if (!isConnected || wsClient == null) {
@@ -392,6 +412,8 @@ public class EditorUI extends JFrame {
         localClock++;
         usersPanel.revalidate();
         usersPanel.repaint();
+        undoStack.clear();
+        redoStack.clear();
         isRemoteUpdate = false;
     }
 
@@ -408,48 +430,50 @@ public class EditorUI extends JFrame {
     }
 
     private void handleInsertAtOffset(int offset, String text) {
-        if (currentUserRole != UserRole.EDITOR) {
-            return;
+    if (currentUserRole != UserRole.EDITOR) return;
+
+    String parentId = document.getCharIdBeforeOffset(blockId, offset);
+    java.util.List<Object> ops = new ArrayList<>();
+
+    for (int i = 0; i < text.length(); i++) {
+        char value = text.charAt(i);
+        InsertCharacterOperation op = new InsertCharacterOperation(localUserId, localClock, value, parentId, blockId);
+        document.apply(op);
+        parentId = op.getCharId();
+        localClock++;
+        ops.add(op);
+        if (wsClient != null && wsClient.isConnected()) {
+            wsClient.sendMessage(MessageHandler.operationToMessage(op, currentDocumentId));
         }
-        String parentId = document.getCharIdBeforeOffset(blockId, offset);
-        for (int i = 0; i < text.length(); i++) {
-            char value = text.charAt(i);
-            InsertCharacterOperation op = new InsertCharacterOperation(localUserId, localClock, value, parentId,
-                    blockId);
-            document.apply(op);
-            parentId = op.getCharId();
-            localClock++;
-            if (wsClient != null && wsClient.isConnected()) {
-                String message = MessageHandler.operationToMessage(op, currentDocumentId);
-                wsClient.sendMessage(message);
-            }
-        }
-        refreshTextFromDocument(offset + text.length());
     }
 
+    pushUndo(ops);
+    refreshTextFromDocument(offset + text.length());
+}
+
     private void handleDeleteRange(int offset, int length) {
-        if (currentUserRole != UserRole.EDITOR) {
-            return;
+    if (currentUserRole != UserRole.EDITOR) return;
+
+    java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
+    java.util.List<Object> ops = new ArrayList<>();
+    int end = Math.min(offset + length, visibleIds.size());
+
+    for (int i = offset; i < end; i++) {
+        String charId = visibleIds.get(i);
+        String[] parts = charId.split("-");
+        int userId = Integer.parseInt(parts[0]);
+        int clock = Integer.parseInt(parts[1]);
+        DeleteCharacterOperation op = new DeleteCharacterOperation(userId, clock, blockId);
+        document.apply(op);
+        ops.add(op);
+        if (wsClient != null && wsClient.isConnected()) {
+            wsClient.sendMessage(MessageHandler.operationToMessage(op, currentDocumentId));
         }
-        java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
-        java.util.List<String> idsToDelete = new ArrayList<>();
-        int end = Math.min(offset + length, visibleIds.size());
-        for (int i = offset; i < end; i++) {
-            idsToDelete.add(visibleIds.get(i));
-        }
-        for (String charId : idsToDelete) {
-            String[] parts = charId.split("-");
-            int userId = Integer.parseInt(parts[0]);
-            int clock = Integer.parseInt(parts[1]);
-            DeleteCharacterOperation op = new DeleteCharacterOperation(userId, clock, blockId);
-            document.apply(op);
-            if (wsClient != null && wsClient.isConnected()) {
-                String message = MessageHandler.operationToMessage(op, currentDocumentId);
-                wsClient.sendMessage(message);
-            }
-        }
-        refreshTextFromDocument(offset);
     }
+
+    pushUndo(ops);
+    refreshTextFromDocument(offset);
+}
 
     private void refreshTextFromDocument() {
         refreshTextFromDocument(textPane.getCaretPosition());
@@ -699,7 +723,83 @@ public class EditorUI extends JFrame {
         exportButton.setEnabled(true);
         importButton.setEnabled(currentUserRole == UserRole.EDITOR && currentDocumentId != null && isConnected);
     }
+    private void pushUndo(java.util.List<Object> ops) {
+    undoStack.push(ops);
+    redoStack.clear();
+    updateUndoRedoButtons();
+}
 
+private void updateUndoRedoButtons() {
+    undoButton.setEnabled(!undoStack.isEmpty() && currentUserRole == UserRole.EDITOR);
+    redoButton.setEnabled(!redoStack.isEmpty() && currentUserRole == UserRole.EDITOR);
+}
+
+private void performUndo() {
+    if (undoStack.isEmpty() || currentUserRole != UserRole.EDITOR) return;
+
+    java.util.List<Object> ops = undoStack.pop();
+    java.util.List<Object> inverseOps = new ArrayList<>();
+    java.util.List<Object> reversed = new ArrayList<>(ops);
+    java.util.Collections.reverse(reversed);
+
+    for (Object op : reversed) {
+        if (op instanceof InsertCharacterOperation) {
+            InsertCharacterOperation ins = (InsertCharacterOperation) op;
+            DeleteCharacterOperation del = new DeleteCharacterOperation(
+                ins.getUserId(), ins.getClock(), ins.getBlockId());
+            document.apply(del);
+            inverseOps.add(ins);
+            if (wsClient != null && wsClient.isConnected()) {
+                wsClient.sendMessage(MessageHandler.operationToMessage(del, currentDocumentId));
+            }
+        } else if (op instanceof DeleteCharacterOperation) {
+            DeleteCharacterOperation del = (DeleteCharacterOperation) op;
+            reinsertCharacter(del.getCharId(), del.getBlockId());
+            inverseOps.add(del);
+        }
+    }
+
+    redoStack.push(inverseOps);
+    refreshTextFromDocument();
+    updateUndoRedoButtons();
+}
+
+private void performRedo() {
+    if (redoStack.isEmpty() || currentUserRole != UserRole.EDITOR) return;
+
+    java.util.List<Object> ops = redoStack.pop();
+    java.util.List<Object> inverseOps = new ArrayList<>();
+    java.util.List<Object> reversed = new ArrayList<>(ops);
+    java.util.Collections.reverse(reversed);
+
+    for (Object op : reversed) {
+        if (op instanceof InsertCharacterOperation) {
+            InsertCharacterOperation ins = (InsertCharacterOperation) op;
+            reinsertCharacter(ins.getCharId(), ins.getBlockId());
+            inverseOps.add(ins);
+            if (wsClient != null && wsClient.isConnected()) {
+                wsClient.sendMessage(MessageHandler.operationToMessage(ins, currentDocumentId));
+            }
+        } else if (op instanceof DeleteCharacterOperation) {
+            document.apply((DeleteCharacterOperation) op);
+            inverseOps.add(op);
+            if (wsClient != null && wsClient.isConnected()) {
+                wsClient.sendMessage(MessageHandler.operationToMessage((DeleteCharacterOperation) op, currentDocumentId));
+            }
+        }
+    }
+
+    undoStack.push(inverseOps);
+    refreshTextFromDocument();
+    updateUndoRedoButtons();
+}
+
+private void reinsertCharacter(String charId, String blockId) {
+    Block block = document.getBlock(blockId);
+    if (block != null) {
+        block.getCharCRDT().undelete(charId);
+    }
+}
     private void handleRemoteMessage(String message) {
         // Handle session creation response
         if (MessageHandler.isSessionCreatedMessage(message)) {

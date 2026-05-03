@@ -1,0 +1,22 @@
+{
+  "documentId": "aa_1777834621963",
+  "editorCode": "E-D3D8BF26",
+  "viewerCode": "V-B686FFB9",
+  "operationHistory": [
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":1,\"value\":\"a\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":2,\"value\":\"h\",\"parentId\":\"43231-1\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":3,\"value\":\"e\",\"parentId\":\"43231-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"DELETE_CHAR\",\"userId\":43231,\"clock\":3,\"charId\":\"43231-3\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":4,\"value\":\"m\",\"parentId\":\"43231-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":5,\"value\":\"e\",\"parentId\":\"43231-4\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":6,\"value\":\"d\",\"parentId\":\"43231-5\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"DELETE_CHAR\",\"userId\":43231,\"clock\":6,\"charId\":\"43231-6\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":6,\"value\":\"d\",\"parentId\":\"43231-5\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"DELETE_CHAR\",\"userId\":43231,\"clock\":6,\"charId\":\"43231-6\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"DELETE_CHAR\",\"userId\":43231,\"clock\":5,\"charId\":\"43231-5\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"DELETE_CHAR\",\"userId\":43231,\"clock\":4,\"charId\":\"43231-4\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":4,\"value\":\"m\",\"parentId\":\"43231-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":5,\"value\":\"e\",\"parentId\":\"43231-4\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"aa_1777834621963\",\"type\":\"INSERT_CHAR\",\"userId\":43231,\"clock\":6,\"value\":\"d\",\"parentId\":\"43231-5\",\"blockId\":\"block-1\"}"
+  ]
+}

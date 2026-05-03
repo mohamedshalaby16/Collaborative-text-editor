@@ -1,0 +1,12 @@
+{
+  "documentId": "ahmed_1777834356514",
+  "editorCode": "E-1B712B77",
+  "viewerCode": "V-5D9DCF1F",
+  "operationHistory": [
+    "{\"documentId\":\"ahmed_1777834356514\",\"type\":\"INSERT_CHAR\",\"userId\":23941,\"clock\":1,\"value\":\"a\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ahmed_1777834356514\",\"type\":\"INSERT_CHAR\",\"userId\":23941,\"clock\":2,\"value\":\"h\",\"parentId\":\"23941-1\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ahmed_1777834356514\",\"type\":\"INSERT_CHAR\",\"userId\":23941,\"clock\":3,\"value\":\"m\",\"parentId\":\"23941-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ahmed_1777834356514\",\"type\":\"INSERT_CHAR\",\"userId\":23941,\"clock\":4,\"value\":\"e\",\"parentId\":\"23941-3\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ahmed_1777834356514\",\"type\":\"INSERT_CHAR\",\"userId\":23941,\"clock\":5,\"value\":\"d\",\"parentId\":\"23941-4\",\"blockId\":\"block-1\"}"
+  ]
+}
