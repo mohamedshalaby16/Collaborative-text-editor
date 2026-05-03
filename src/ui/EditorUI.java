@@ -15,6 +15,7 @@ import operations.DeleteBlockOperation;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
 import operations.InsertCharacterOperation;
+import persistence.TextFileManager;
 
 public class EditorUI extends JFrame {
 
@@ -37,6 +38,8 @@ public class EditorUI extends JFrame {
     private JTextPane textPane;
     private JTextField usernameField;
     private JButton connectButton;
+    private JButton exportButton;
+    private JButton importButton;
     private JLabel statusLabel;
 
     private JPanel usersPanel;
@@ -108,6 +111,11 @@ public class EditorUI extends JFrame {
         viewerCodeField.setEditable(false);
         roleLabel = new JLabel("Role: none");
 
+        exportButton = new JButton("Export TXT");
+        exportButton.setEnabled(false);
+        importButton = new JButton("Import TXT");
+        importButton.setEnabled(false);
+
         shareCodesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         shareCodesPanel.add(new JLabel("Editor Code:"));
         shareCodesPanel.add(editorCodeField);
@@ -154,6 +162,8 @@ public class EditorUI extends JFrame {
         documentRow.add(new JLabel("Join Code:"));
         documentRow.add(documentCodeField);
         documentRow.add(joinDocButton);
+        documentRow.add(importButton);
+        documentRow.add(exportButton);
         documentRow.add(roleLabel);
         documentRow.add(shareCodesPanel);
 
@@ -179,6 +189,8 @@ public class EditorUI extends JFrame {
 
         createDocButton.addActionListener(e -> createNewDocument());
         joinDocButton.addActionListener(e -> joinDocumentWithCode());
+        importButton.addActionListener(e -> importTextFile());
+        exportButton.addActionListener(e -> exportCurrentDocumentText());
 
         textPane.addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
@@ -519,6 +531,7 @@ public class EditorUI extends JFrame {
                     connectButton.setText("Disconnect");
                     createDocButton.setEnabled(true);
                     joinDocButton.setEnabled(true);
+                    updateImportExportButtons();
                 });
             }
 
@@ -539,6 +552,7 @@ public class EditorUI extends JFrame {
                     hostField.setEnabled(true);
                     portField.setEnabled(true);
                     remoteCursors.clear();
+                    updateImportExportButtons();
                     for (int uid : new ArrayList<>(userLabels.keySet())) {
                         removeUserFromPanel(uid);
                     }
@@ -561,6 +575,58 @@ public class EditorUI extends JFrame {
         }
     }
 
+    private void exportCurrentDocumentText() {
+        String text = document.getText();
+        if (TextFileManager.saveTextToFile(text, this)) {
+            setStatus("Document exported successfully.");
+        }
+    }
+
+    private void importTextFile() {
+        if (currentUserRole == UserRole.VIEWER && isConnected) {
+            showViewerEditWarning();
+            return;
+        }
+
+        String fileText = TextFileManager.loadTextFromFile(this);
+        if (fileText == null) {
+            return;
+        }
+
+        if (fileText.isEmpty()) {
+            setStatus("Import file was empty.");
+            return;
+        }
+
+        String parentId = null;
+        java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
+        if (!visibleIds.isEmpty()) {
+            parentId = visibleIds.get(visibleIds.size() - 1);
+        }
+
+        for (int i = 0; i < fileText.length(); i++) {
+            char value = fileText.charAt(i);
+            InsertCharacterOperation op = new InsertCharacterOperation(localUserId, localClock, value, parentId,
+                    blockId);
+            document.apply(op);
+            parentId = op.getCharId();
+            localClock++;
+            if (wsClient != null && wsClient.isConnected() && currentDocumentId != null) {
+                String message = MessageHandler.operationToMessage(op, currentDocumentId);
+                wsClient.sendMessage(message);
+            }
+        }
+
+        refreshTextFromDocument();
+        updateImportExportButtons();
+        setStatus("Imported text from file.");
+    }
+
+    private void updateImportExportButtons() {
+        exportButton.setEnabled(true);
+        importButton.setEnabled(currentUserRole == UserRole.EDITOR && currentDocumentId != null && isConnected);
+    }
+
     private void handleRemoteMessage(String message) {
         // Handle session creation response
         if (MessageHandler.isSessionCreatedMessage(message)) {
@@ -581,6 +647,7 @@ public class EditorUI extends JFrame {
 
             // Send join message for this session
             wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername(), currentDocumentId));
+            updateImportExportButtons();
             return;
         }
 
@@ -612,6 +679,7 @@ public class EditorUI extends JFrame {
                 applyRemoteOperation(oldOperationMessage);
             }
             refreshTextFromDocument();
+            updateImportExportButtons();
 
             // Send presence join
             wsClient.sendMessage(MessageHandler.joinToMessage(localUserId, getUsername(), currentDocumentId));
