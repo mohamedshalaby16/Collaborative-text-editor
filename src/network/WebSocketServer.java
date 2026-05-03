@@ -265,7 +265,8 @@ public class WebSocketServer {
         boolean isEdit = messageType != null && (messageType.equals("INSERT_CHAR") ||
                 messageType.equals("DELETE_CHAR") ||
                 messageType.equals("INSERT_BLOCK") ||
-                messageType.equals("DELETE_BLOCK"));
+                messageType.equals("DELETE_BLOCK")) ||
+                messageType.equals("FORMAT_CHAR");
 
         if (isEdit) {
             if (sender.userRole != UserRole.EDITOR) {

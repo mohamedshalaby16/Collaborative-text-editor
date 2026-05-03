@@ -109,5 +109,17 @@ public class CharacterCRDT {
     if (node != null) {
         node.del = false;
     }
+    }
+    public void setFormat(String id, boolean bold, boolean italic) {
+    CRDTNode node = nodeMap.get(id);
+    if (node != null) {
+        node.bold = bold;
+        node.italic = italic;
+    }
+}
+
+public CRDTNode getNode(String id) {
+    return nodeMap.get(id);
 }
 }
+

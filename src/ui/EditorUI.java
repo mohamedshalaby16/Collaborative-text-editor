@@ -47,6 +47,8 @@ public class EditorUI extends JFrame {
     private JButton exportButton;
     private JButton importButton;
     private JLabel statusLabel;
+    private JButton boldButton;
+    private JButton italicButton;
 
     private DefaultListModel<model.SessionInfo> sessionListModel;
     private JList<model.SessionInfo> sessionList;
@@ -77,7 +79,7 @@ public class EditorUI extends JFrame {
         currentUserRole = UserRole.VIEWER; // default until joined
 
         setTitle("Collaborative Text Editor - Phase 3");
-        setSize(1000, 600);
+        setSize(1300, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -174,6 +176,12 @@ public class EditorUI extends JFrame {
         // Initially disable join buttons until connected
         createDocButton.setEnabled(false);
         joinDocButton.setEnabled(false);
+        boldButton = new JButton("B");
+        boldButton.setFont(boldButton.getFont().deriveFont(Font.BOLD));
+        boldButton.setEnabled(false);
+        italicButton = new JButton("/");
+        italicButton.setFont(italicButton.getFont().deriveFont(Font.ITALIC));
+        italicButton.setEnabled(false);
     }
 
     private void layoutComponents() {
@@ -202,6 +210,10 @@ public class EditorUI extends JFrame {
         documentRow.add(roleLabel);
         documentRow.add(undoButton);
         documentRow.add(redoButton);
+        JPanel formatRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        formatRow.add(new JLabel("Format:"));
+        formatRow.add(boldButton);
+        formatRow.add(italicButton);
 
         // Share codes row - always visible
         JPanel codesRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -211,6 +223,7 @@ public class EditorUI extends JFrame {
         topPanel.add(connectionRow);
         topPanel.add(documentRow);
         topPanel.add(codesRow);
+        topPanel.add(formatRow);
 
         JScrollPane scrollPane = new JScrollPane(textPane);
 
@@ -240,7 +253,8 @@ public class EditorUI extends JFrame {
         exportButton.addActionListener(e -> exportCurrentDocumentText());
         undoButton.addActionListener(e -> performUndo());
         redoButton.addActionListener(e -> performRedo());
-
+        boldButton.addActionListener(e -> applyFormat(true, false));
+        italicButton.addActionListener(e -> applyFormat(false, true));
         sessionList.addListSelectionListener(e -> updateSessionListButtons());
 
         textPane.addKeyListener(new java.awt.event.KeyAdapter() {
@@ -479,31 +493,44 @@ public class EditorUI extends JFrame {
         refreshTextFromDocument(textPane.getCaretPosition());
     }
 
-    private void refreshTextFromDocument(int caretPosition) {
-        isRemoteUpdate = true;
-        String text = document.getText();
-        textPane.setText(text);
-        textPane.setCaretPosition(Math.max(0, Math.min(caretPosition, text.length())));
-        isRemoteUpdate = false;
+   private void refreshTextFromDocument(int caretPosition) {
+    isRemoteUpdate = true;
+    StyledDocument styledDoc = textPane.getStyledDocument();
+    try {
+        styledDoc.remove(0, styledDoc.getLength());
+    } catch (BadLocationException e) {}
 
-        SwingUtilities.invokeLater(() -> {
-            Highlighter highlighter = textPane.getHighlighter();
-            for (Object tag : remoteCursorHighlightTags)
-                highlighter.removeHighlight(tag);
-            remoteCursorHighlightTags.clear();
-            java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
-            for (CursorInfo cursor : remoteCursors.values()) {
-                int cursorPosition = getRemoteCursorPosition(cursor, visibleIds, text.length());
-                try {
-                    Object tag = highlighter.addHighlight(cursorPosition, cursorPosition,
-                            new RemoteCursorPainter(cursor.color));
-                    remoteCursorHighlightTags.add(tag);
-                } catch (BadLocationException e) {
-                    System.out.println("Failed to draw remote cursor: " + e.getMessage());
-                }
-            }
-        });
+    java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
+
+    for (String charId : visibleIds) {
+        crdt.character.CRDTNode node = document.getCharNode(blockId, charId);
+        if (node == null) continue;
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setBold(attrs, node.bold);
+        StyleConstants.setItalic(attrs, node.italic);
+        try {
+            styledDoc.insertString(styledDoc.getLength(), String.valueOf(node.value), attrs);
+        } catch (BadLocationException e) {}
     }
+
+    textPane.setCaretPosition(Math.max(0, Math.min(caretPosition, styledDoc.getLength())));
+    isRemoteUpdate = false;
+
+    SwingUtilities.invokeLater(() -> {
+        Highlighter highlighter = textPane.getHighlighter();
+        for (Object tag : remoteCursorHighlightTags)
+            highlighter.removeHighlight(tag);
+        remoteCursorHighlightTags.clear();
+        for (CursorInfo cursor : remoteCursors.values()) {
+            int cursorPosition = getRemoteCursorPosition(cursor, visibleIds, styledDoc.getLength());
+            try {
+                Object tag = highlighter.addHighlight(cursorPosition, cursorPosition,
+                        new RemoteCursorPainter(cursor.color));
+                remoteCursorHighlightTags.add(tag);
+            } catch (BadLocationException e) {}
+        }
+    });
+}
 
     private int getRemoteCursorPosition(CursorInfo cursor, java.util.List<String> visibleIds, int textLength) {
         if (cursor.anchorCharId != null) {
@@ -722,6 +749,8 @@ public class EditorUI extends JFrame {
     private void updateImportExportButtons() {
         exportButton.setEnabled(true);
         importButton.setEnabled(currentUserRole == UserRole.EDITOR && currentDocumentId != null && isConnected);
+        boldButton.setEnabled(currentUserRole == UserRole.EDITOR && currentDocumentId != null && isConnected);
+        italicButton.setEnabled(currentUserRole == UserRole.EDITOR && currentDocumentId != null && isConnected);
     }
     private void pushUndo(java.util.List<Object> ops) {
     undoStack.push(ops);
@@ -940,7 +969,15 @@ private void reinsertCharacter(String charId, String blockId) {
             refreshTextFromDocument();
             return;
         }
-
+            if (MessageHandler.isFormatMessage(message)) {
+            String charId = MessageHandler.getFormatCharId(message);
+            String fmtBlockId = MessageHandler.getFormatBlockId(message);
+            boolean bold = MessageHandler.getFormatBold(message);
+            boolean italic = MessageHandler.getFormatItalic(message);
+            document.setFormat(fmtBlockId, charId, bold, italic);
+            refreshTextFromDocument(textPane.getCaretPosition());
+            return;
+        }
         Object operation = MessageHandler.messageToOperation(message);
         if (operation != null) {
             applyRemoteOperation(operation);
@@ -988,4 +1025,24 @@ private void reinsertCharacter(String charId, String blockId) {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(EditorUI::new);
     }
+    private void applyFormat(boolean bold, boolean italic) {
+    if (currentUserRole != UserRole.EDITOR) return;
+    int start = textPane.getSelectionStart();
+    int end = textPane.getSelectionEnd();
+    if (start == end) return;
+
+    java.util.List<String> visibleIds = document.getVisibleCharacterIds(blockId);
+    for (int i = start; i < end && i < visibleIds.size(); i++) {
+        String charId = visibleIds.get(i);
+        crdt.character.CRDTNode node = document.getCharNode(blockId, charId);
+        if (node == null) continue;
+        boolean newBold = bold ? !node.bold : node.bold;
+        boolean newItalic = italic ? !node.italic : node.italic;
+        document.setFormat(blockId, charId, newBold, newItalic);
+        if (wsClient != null && wsClient.isConnected()) {
+            wsClient.sendMessage(MessageHandler.formatMessage(currentDocumentId, charId, blockId, newBold, newItalic));
+        }
+    }
+    refreshTextFromDocument(textPane.getCaretPosition());
+}
 }

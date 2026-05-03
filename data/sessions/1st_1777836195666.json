@@ -1,0 +1,19 @@
+{
+  "documentId": "1st_1777836195666",
+  "editorCode": "E-7DB8BCF5",
+  "viewerCode": "V-FB1225D3",
+  "operationHistory": [
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"INSERT_CHAR\",\"userId\":4796,\"clock\":1,\"value\":\"a\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"INSERT_CHAR\",\"userId\":4796,\"clock\":2,\"value\":\"h\",\"parentId\":\"4796-1\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"INSERT_CHAR\",\"userId\":4796,\"clock\":3,\"value\":\"m\",\"parentId\":\"4796-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"INSERT_CHAR\",\"userId\":4796,\"clock\":4,\"value\":\"e\",\"parentId\":\"4796-3\",\"blockId\":\"block-1\"}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"1st_1777836195666\",\"charId\":\"4796-1\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"1st_1777836195666\",\"charId\":\"4796-2\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"1st_1777836195666\",\"charId\":\"4796-3\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"1st_1777836195666\",\"charId\":\"4796-4\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"DELETE_CHAR\",\"userId\":4796,\"clock\":4,\"charId\":\"4796-4\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"DELETE_CHAR\",\"userId\":4796,\"clock\":3,\"charId\":\"4796-3\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"DELETE_CHAR\",\"userId\":4796,\"clock\":2,\"charId\":\"4796-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"1st_1777836195666\",\"type\":\"DELETE_CHAR\",\"userId\":4796,\"clock\":1,\"charId\":\"4796-1\",\"blockId\":\"block-1\"}"
+  ]
+}

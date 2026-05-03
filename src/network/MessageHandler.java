@@ -454,4 +454,38 @@ public class MessageHandler {
         }
         return null;
     }
+        public static String formatMessage(String documentId, String charId, String blockId, boolean bold, boolean italic) {
+        JsonObject json = new JsonObject();
+        json.addProperty("type", "FORMAT_CHAR");
+        json.addProperty("documentId", documentId);
+        json.addProperty("charId", charId);
+        json.addProperty("blockId", blockId);
+        json.addProperty("bold", bold);
+        json.addProperty("italic", italic);
+        return gson.toJson(json);
+    }
+
+    public static boolean isFormatMessage(String message) {
+        return isMessageType(message, "FORMAT_CHAR");
+    }
+
+    public static String getFormatCharId(String message) {
+        return getStringField(message, "charId");
+    }
+
+    public static String getFormatBlockId(String message) {
+        return getStringField(message, "blockId");
+    }
+
+    public static boolean getFormatBold(String message) {
+        try {
+            return JsonParser.parseString(message).getAsJsonObject().get("bold").getAsBoolean();
+        } catch (Exception e) { return false; }
+    }
+
+    public static boolean getFormatItalic(String message) {
+        try {
+            return JsonParser.parseString(message).getAsJsonObject().get("italic").getAsBoolean();
+        } catch (Exception e) { return false; }
+    }
 }
