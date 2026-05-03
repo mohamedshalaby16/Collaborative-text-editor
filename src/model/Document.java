@@ -2,12 +2,14 @@ package model;
 
 import crdt.block.Block;
 import crdt.block.BlockCRDT;
+import crdt.character.CRDTNode;
 import java.util.Collections;
 import java.util.List;
 import operations.DeleteBlockOperation;
 import operations.DeleteCharacterOperation;
 import operations.InsertBlockOperation;
 import operations.InsertCharacterOperation;
+
 
 public class Document {
 
@@ -110,5 +112,25 @@ public class Document {
 
         return visibleIds.get(offset);
     }
-
+        public void setFormat(String blockId, String charId, boolean bold, boolean italic) {
+    Block block = blockCRDT.getBlock(blockId);
+    if (block != null) {
+        block.getCharCRDT().setFormat(charId, bold, italic);
+    }
 }
+
+    public CRDTNode getCharNode(String blockId, String charId) {
+        Block block = blockCRDT.getBlock(blockId);
+        if (block != null) {
+            return block.getCharCRDT().getNode(charId);
+        }
+        return null;
+}
+
+    public Block getBlock(String blockId) {
+    return blockCRDT.getBlock(blockId);
+}
+}
+
+
+

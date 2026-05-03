@@ -1,0 +1,22 @@
+{
+  "documentId": "ff_1777837180496",
+  "editorCode": "E-8D5B41D4",
+  "viewerCode": "V-4CDE9B48",
+  "operationHistory": [
+    "{\"documentId\":\"ff_1777837180496\",\"type\":\"INSERT_CHAR\",\"userId\":60395,\"clock\":1,\"value\":\"a\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ff_1777837180496\",\"type\":\"INSERT_CHAR\",\"userId\":60395,\"clock\":2,\"value\":\"h\",\"parentId\":\"60395-1\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ff_1777837180496\",\"type\":\"INSERT_CHAR\",\"userId\":60395,\"clock\":3,\"value\":\"m\",\"parentId\":\"60395-2\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ff_1777837180496\",\"type\":\"INSERT_CHAR\",\"userId\":60395,\"clock\":4,\"value\":\"e\",\"parentId\":\"60395-3\",\"blockId\":\"block-1\"}",
+    "{\"documentId\":\"ff_1777837180496\",\"type\":\"INSERT_CHAR\",\"userId\":60395,\"clock\":5,\"value\":\"d\",\"parentId\":\"60395-4\",\"blockId\":\"block-1\"}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-1\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-2\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-3\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-4\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-5\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":false}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-1\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":true}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-2\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":true}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-3\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":true}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-4\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":true}",
+    "{\"type\":\"FORMAT_CHAR\",\"documentId\":\"ff_1777837180496\",\"charId\":\"60395-5\",\"blockId\":\"block-1\",\"bold\":true,\"italic\":true}"
+  ]
+}

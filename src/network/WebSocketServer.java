@@ -95,8 +95,9 @@ public class WebSocketServer {
         return UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
-    public CollaborationSession createSession(String creatorUsername) {
-        String documentId = "doc_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 4);
+    public CollaborationSession createSession(String creatorUsername, String docName) {
+        String safeDocName = docName.replaceAll("[^a-zA-Z0-9_\\-]", "_");
+    String documentId = safeDocName + "_" + System.currentTimeMillis();
         String editorCode = "E-" + generateShareCode();
         String viewerCode = "V-" + generateShareCode();
 
@@ -158,7 +159,8 @@ public class WebSocketServer {
         if ("CREATE_SESSION".equals(messageType)) {
             int userId = getUserIdFromMessage(message);
             String username = getUsernameFromMessage(message);
-            CollaborationSession session = createSession(username);
+            String docName = getDocNameFromMessage(message);    
+            CollaborationSession session = createSession(username, docName);
 
             String response = MessageHandler.sessionCreatedMessage(
                     session.getDocumentId(),
@@ -207,6 +209,53 @@ public class WebSocketServer {
             return;
         }
 
+        // Handle LIST_SESSIONS request
+        if ("LIST_SESSIONS".equals(messageType)) {
+            java.util.List<model.SessionInfo> sessionInfoList = new java.util.ArrayList<>();
+            for (CollaborationSession activeSession : sessions.values()) {
+                sessionInfoList.add(new model.SessionInfo(
+                        activeSession.getDocumentId(),
+                        activeSession.getEditorCode(),
+                        activeSession.getViewerCode()));
+            }
+            sender.sendMessage(MessageHandler.sessionsListMessage(sessionInfoList));
+            return;
+        }
+
+        // Handle DELETE_SESSION request
+        if ("DELETE_SESSION".equals(messageType)) {
+            String documentIdToDelete = MessageHandler.getDocumentId(message);
+            if (documentIdToDelete == null) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, null,
+                        "Missing documentId"));
+                return;
+            }
+
+            CollaborationSession targetSession = sessions.get(documentIdToDelete);
+            if (targetSession == null) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, documentIdToDelete,
+                        "Session not found"));
+                return;
+            }
+
+            if (!targetSession.isEmpty()) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, documentIdToDelete,
+                        "Cannot delete active session"));
+                return;
+            }
+
+            sessions.remove(documentIdToDelete);
+            boolean deleted = storage.deleteSession(documentIdToDelete);
+            if (deleted) {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(true, documentIdToDelete, null));
+                System.out.println("Deleted session " + documentIdToDelete + " from storage and memory.");
+            } else {
+                sender.sendMessage(MessageHandler.deleteSessionResponseMessage(false, documentIdToDelete,
+                        "Failed to delete session file"));
+            }
+            return;
+        }
+
         // Handle regular messages (edits, cursor, leave)
         String documentId = MessageHandler.getDocumentId(message);
         if (documentId == null) {
@@ -224,7 +273,8 @@ public class WebSocketServer {
         boolean isEdit = messageType != null && (messageType.equals("INSERT_CHAR") ||
                 messageType.equals("DELETE_CHAR") ||
                 messageType.equals("INSERT_BLOCK") ||
-                messageType.equals("DELETE_BLOCK"));
+                messageType.equals("DELETE_BLOCK")) ||
+                messageType.equals("FORMAT_CHAR");
 
         if (isEdit) {
             if (sender.userRole != UserRole.EDITOR) {
@@ -276,6 +326,15 @@ public class WebSocketServer {
         }
         return "unknown";
     }
+    private String getDocNameFromMessage(String message) {
+    try {
+        com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(message).getAsJsonObject();
+        if (json.has("docName")) {
+            return json.get("docName").getAsString();
+        }
+    } catch (Exception e) {}
+    return "doc";
+}
 
     private String getJoinCodeFromMessage(String message) {
         try {
